@@ -1,6 +1,7 @@
 streamlit
 pandas
-chromadb
 sentence-transformers
 azure-ai-inference
 openpyxl
+chromadb
+weaviate-client

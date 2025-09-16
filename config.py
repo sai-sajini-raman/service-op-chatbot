@@ -11,6 +11,10 @@ import os
 CHROMA_DB_PATH = os.path.abspath("chromadb/")
 CHROMA_COLLECTION_NAME = "excel_chunks_v2"
 
+# Weaviate settings
+WEAVIATE_URL = "http://localhost:8080"  # needs to be updated hosted elsewhere
+WEAVIATE_CLASS_NAME = "ExcelChunk"
+
 # LLM settings
 AZURE_API_KEY = "YOUR_AZURE_API_KEY"  # Set via environment variable or config
 AZURE_ENDPOINT = "YOUR_AZURE_ENDPOINT"  # Set via environment variable or config
