@@ -1,7 +1,8 @@
 # config.py
 
 # Path to the Excel knowledge source
-EXCEL_PATH = "knowledge.xlsx"
+# EXCEL_PATH = "knowledge.xlsx"
+EXCEL_PATH = "MSI_MKI_knowledge100.xlsx"
 
 # Embedding model name (HuggingFace)
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
@@ -9,11 +10,12 @@ EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 # ChromaDB settings
 import os
 CHROMA_DB_PATH = os.path.abspath("chromadb/")
-CHROMA_COLLECTION_NAME = "excel_chunks_v2"
+CHROMA_COLLECTION_NAME = "excel_chunks_ingest_v2"
 
 # Weaviate settings
 WEAVIATE_URL = "http://localhost:8080"  # needs to be updated hosted elsewhere
-WEAVIATE_CLASS_NAME = "ExcelChunk"
+# WEAVIATE_CLASS_NAME = "ExcelChunk"
+WEAVIATE_CLASS_NAME = "FilteredChunkUni"
 
 # LLM settings
 AZURE_API_KEY = "YOUR_AZURE_API_KEY"  # Set via environment variable or config
