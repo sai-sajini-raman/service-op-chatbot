@@ -14,7 +14,15 @@ def parse_excel_to_chunks(excel_path):
     for sheet_name in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=sheet_name)
         for idx, row in df.iterrows():
-            text = " ".join([str(cell) for cell in row if pd.notnull(cell)])
+            # Create header-value pairs for each cell in the row
+            header_value_pairs = []
+            for column_name, cell_value in row.items():
+                if pd.notnull(cell_value):
+                    header_value_pairs.append(f"{column_name}: {cell_value}")
+            
+            # Join pairs with commas and spaces
+            text = ", ".join(header_value_pairs)
+            
             if text.strip():
                 chunks.append({
                     "text": text,
