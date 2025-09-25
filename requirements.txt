@@ -5,3 +5,5 @@ azure-ai-inference
 openpyxl
 chromadb
 weaviate-client
+pdfplumber
+docx

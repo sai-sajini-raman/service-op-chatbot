@@ -4,23 +4,25 @@ from rag_pipeline import answer_query
 from config import EXCEL_PATH
 import os
 
-st.set_page_config(page_title="Excel RAG Chatbot", layout="wide")
-st.title("Excel RAG Chatbot (POC)")
+st.set_page_config(page_title="RAG Chatbot - POC", layout="wide")
+st.title("RAG Chatbot (POC)")
 
 if not os.path.exists(EXCEL_PATH):
     st.error(f"Excel file not found: {EXCEL_PATH}")
     st.stop()
 
+
 if "chat_history" not in st.session_state:
     st.session_state["chat_history"] = []
-
 if "sources" not in st.session_state:
     st.session_state["sources"] = []
+if "user_query" not in st.session_state:
+    st.session_state["user_query"] = ""
 
 
 #--------- Streamlit Form for robust input handling ---------
 with st.form(key="chat_form"):
-    query = st.text_input("Type your question:", value=st.session_state.get("user_query", ""), key="user_query")
+    query = st.text_input("Type your question:", value=st.session_state["user_query"], key="user_query")
     submitted = st.form_submit_button("Send")
     if submitted and query:
         with st.spinner("Retrieving answer..."):
@@ -31,8 +33,7 @@ with st.form(key="chat_form"):
                 st.session_state["chat_history"].append({"user": query, "bot": result["answer"]})
                 st.session_state["sources"] = result["chunks"]
                 st.session_state["latency"] = result["latency"]
-                # Clear the input field after submission
-                st.session_state["user_query"] = ""
+                # Do not clear the input field here to avoid session state error
             except Exception as e:
                 error = e
             #--------- DEBUG: Show retrieved chunks structure in sidebar ---------

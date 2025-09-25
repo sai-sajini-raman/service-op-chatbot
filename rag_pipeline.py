@@ -7,27 +7,33 @@ from config import WEAVIATE_URL, WEAVIATE_CLASS_NAME, EMBEDDING_MODEL, TOP_K, SY
 
 def retrieve_chunks(query, top_k=TOP_K):
     # Connect to Weaviate HTTP-only (v4)
-        client = weaviate.Client("http://localhost:8080")
-        model = SentenceTransformer(EMBEDDING_MODEL)
-        query_emb = model.encode([query])[0].tolist()
-        # Use legacy HTTP query API to avoid gRPC errors
-        results = (
-            client.query
-            .get(WEAVIATE_CLASS_NAME, ["text", "sheet", "row"])
-            .with_near_vector({"vector": query_emb})
-            .with_limit(top_k)
-            .do()
-        )
-        hits = results.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
-        chunks = []
-        for hit in hits:
-            chunks.append({
-                "text": hit.get("text"),
-                "sheet": hit.get("sheet"),
-                "row": hit.get("row"),
-                "distance": hit.get("_additional", {}).get("distance")
-            })
-        return chunks
+    client = weaviate.Client("http://localhost:8080")
+    model = SentenceTransformer(EMBEDDING_MODEL)
+    query_emb = model.encode([query])[0].tolist()
+    # Use legacy HTTP query API to avoid gRPC errors
+    results = (
+        client.query
+        .get(WEAVIATE_CLASS_NAME, ["text", "sheet", "row"])
+        .with_near_vector({"vector": query_emb})
+        .with_limit(top_k)
+        .do()
+    )
+    # print Debug: Show raw Weaviate results
+    print("[DEBUG] Raw Weaviate results:", results)
+    hits = results.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
+    # print Debug: Show hits before chunk processing
+    print(f"[DEBUG] Hits before chunk processing: {hits}")
+    chunks = []
+    for hit in hits:
+        chunks.append({
+            "text": hit.get("text"),
+            "sheet": hit.get("sheet"),
+            "row": hit.get("row"),
+            "distance": hit.get("_additional", {}).get("distance")
+        })
+    # print Debug: Show processed chunks
+    print(f"[DEBUG] Processed chunks: {chunks}")
+    return chunks
 
 def build_prompt(context_chunks, user_query):
     context = "\n".join([f"[{c['sheet']}:{c['row']}] {c['text']}" for c in context_chunks])
