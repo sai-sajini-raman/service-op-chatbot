@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 import weaviate
-from config import EXCEL_PATH, EMBEDDING_MODEL, WEAVIATE_CLASS_NAME, WEAVIATE_URL
+from config import EMBEDDING_MODEL, WEAVIATE_CLASS_NAME, WEAVIATE_URL
 
 import pdfplumber
 import docx

@@ -16,13 +16,10 @@ def retrieve_chunks(query, top_k=TOP_K):
         .get(WEAVIATE_CLASS_NAME, ["text", "sheet", "row"])
         .with_near_vector({"vector": query_emb})
         .with_limit(top_k)
+        .with_additional(["distance"])
         .do()
     )
-    # print Debug: Show raw Weaviate results
-    print("[DEBUG] Raw Weaviate results:", results)
     hits = results.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
-    # print Debug: Show hits before chunk processing
-    print(f"[DEBUG] Hits before chunk processing: {hits}")
     chunks = []
     for hit in hits:
         chunks.append({
@@ -31,8 +28,6 @@ def retrieve_chunks(query, top_k=TOP_K):
             "row": hit.get("row"),
             "distance": hit.get("_additional", {}).get("distance")
         })
-    # print Debug: Show processed chunks
-    print(f"[DEBUG] Processed chunks: {chunks}")
     return chunks
 
 def build_prompt(context_chunks, user_query):

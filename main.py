@@ -1,15 +1,15 @@
 # main.py
 import streamlit as st
 from rag_pipeline import answer_query
-from config import EXCEL_PATH
+
 import os
 
-st.set_page_config(page_title="RAG Chatbot - POC", layout="wide")
-st.title("RAG Chatbot (POC)")
+st.set_page_config(page_title="Major Incident Triaging Agent - POC", layout="wide")
+st.title("Major Incident Triaging Agent (POC)")
 
-if not os.path.exists(EXCEL_PATH):
-    st.error(f"Excel file not found: {EXCEL_PATH}")
-    st.stop()
+# if not os.path.exists(EXCEL_PATH):
+#     st.error(f"Excel file not found: {EXCEL_PATH}")
+#     st.stop()
 
 
 if "chat_history" not in st.session_state:
@@ -38,16 +38,16 @@ with st.form(key="chat_form"):
                 error = e
             #--------- DEBUG: Show retrieved chunks structure in sidebar ---------
             #--------- DEBUG: Show all candidate chunks ---------
-            st.sidebar.subheader("[DEBUG] All Candidate Chunks")
-            if result is not None:
-                chunks_val = result.get("chunks", None)
-                st.sidebar.write(f"chunks value: {chunks_val}")
-                st.sidebar.write(f"Type: {type(chunks_val)}")
-                if chunks_val is not None and hasattr(chunks_val, "__len__") and len(chunks_val) > 0:
-                    for idx, item in enumerate(chunks_val):
-                        st.sidebar.write(f"Candidate {idx}: {item}")
-            if error is not None:
-                st.sidebar.error(f"Error: {error}")
+            # st.sidebar.subheader("[DEBUG] All Candidate Chunks")
+            # if result is not None:
+            #     chunks_val = result.get("chunks", None)
+            #     st.sidebar.write(f"chunks value: {chunks_val}")
+            #     st.sidebar.write(f"Type: {type(chunks_val)}")
+            #     if chunks_val is not None and hasattr(chunks_val, "__len__") and len(chunks_val) > 0:
+            #         for idx, item in enumerate(chunks_val):
+            #             st.sidebar.write(f"Candidate {idx}: {item}")
+            # if error is not None:
+            #     st.sidebar.error(f"Error: {error}")
             #--------- END DEBUG ---------
             #--------- END DEBUG ---------
 #--------- END Streamlit Form ---------
@@ -55,22 +55,28 @@ with st.form(key="chat_form"):
 col1, col2 = st.columns([2, 1])
 
 with col1:
-    st.subheader("Chat History")
+    st.subheader("Response")
     for chat in reversed(st.session_state["chat_history"]):
-        st.markdown(f"**User:** {chat['user']}")
-        st.markdown(f"**Bot:** {chat['bot']}")
+
+        st.markdown(f"**Bot:** \n{chat['bot']}")
         st.markdown("---")
 
 with col2:
-    st.subheader("Retrieved Sources & Latency")
-    sources = st.session_state.get("sources", [])
-    if sources and len(sources) > 0:
-        for chunk in sources:
-            dist = chunk.get("distance")
-            st.markdown(f"Sheet: `{chunk.get('sheet')}` | Row: `{chunk.get('row')}` | Score: `{dist:.4f}`" if dist is not None else "Score: N/A")
-            st.markdown(f"Text: {chunk.get('text', '')[:100]}...")
-            st.markdown("---")
-    else:
-        st.info("No relevant sources found for your query.")
-    if st.session_state.get("latency"):
-        st.markdown(f"**Latency:** {st.session_state['latency']:.2f} seconds")
+    st.subheader(" ")
+    # st.subheader("Retrieved Sources")
+    # sources = st.session_state.get("sources", [])
+    # if sources and len(sources) > 0:
+    #     for chunk in sources:
+    #         sheet = chunk.get("sheet")
+    #         row = chunk.get("row")
+    #         dist = chunk.get("distance")
+    #         if dist is not None:
+    #             st.markdown(f"`{sheet}` | Row: `{row}` | Distance: `{dist:.4f}`")
+    #         else:
+    #             st.markdown(f"`{sheet}` | Row: `{row}` | Distance: N/A")
+    #         st.markdown(f"Text: {chunk.get('text', '')[:100]}...")
+    #         st.markdown("---")
+    # else:
+    #     st.info("No relevant sources as of now.")
+    # if st.session_state.get("latency"):
+    #     st.markdown(f"**Latency:** {st.session_state['latency']:.2f} seconds")
