@@ -1,11 +1,13 @@
-# rag_pipeline.py
 import os
 import time
 from sentence_transformers import SentenceTransformer
 import weaviate
-from config import WEAVIATE_URL, WEAVIATE_EXCEL_CLASS_NAME,WEAVIATE_DOCUMENT_CLASS_NAME, EMBEDDING_MODEL, TOP_K, SYSTEM_PROMPT, DEFAULT_MODEL, FALLBACK_MODEL, MEMORY_CLASS
+from config import WEAVIATE_URL, WEAVIATE_EXCEL_CLASS_NAME, WEAVIATE_DOCUMENT_CLASS_NAME, EMBEDDING_MODEL, TOP_K, SYSTEM_PROMPT, DEFAULT_MODEL, FALLBACK_MODEL, MEMORY_CLASS
 
 context_class = MEMORY_CLASS
+
+PAIR_LIMIT = 2  # Only keep the most recent 2 user-bot pairs
+
 def store_context(content, role, conversation_id, user_id):
     """
     Store a conversation entry in Context_v1 with timestamp.
@@ -28,7 +30,7 @@ def store_context(content, role, conversation_id, user_id):
 def get_context_history(conversation_id):
     """
     Retrieve all context history for a given conversation_id from Context_v1.
-    Returns messages sorted by timestamp ascending.
+    Returns messages sorted by timestamp ascending, but only the last PAIR_LIMIT pairs.
     """
     client = weaviate.Client("http://localhost:8080")
     try:
@@ -40,22 +42,55 @@ def get_context_history(conversation_id):
                 "operator": "Equal",
                 "valueString": conversation_id
             })
-            .with_limit(100)
+            .with_limit(PAIR_LIMIT * 2)
             .do()
         )
         messages = result.get("data", {}).get("Get", {}).get(context_class, [])
-        return sorted(messages, key=lambda x: x["timestamp"])
+        messages = sorted(messages, key=lambda x: x["timestamp"])
+        # Only keep the last PAIR_LIMIT pairs (user/assistant alternation)
+        # Each pair is [user, assistant], so take the last PAIR_LIMIT*2 messages
+        return messages[-(PAIR_LIMIT * 2):]
     except Exception as e:
         print(f"Error retrieving context history: {str(e)}")
         return []
 
+def trim_context_history_if_needed(conversation_id):
+    """
+    Truncate old context entries if more than PAIR_LIMIT pairs (4 messages) exist.
+    """
+    client = weaviate.Client("http://localhost:8080")
+    try:
+        result = (
+            client.query
+            .get(context_class, ["content", "role", "conversationId", "userId", "timestamp", "id"])
+            .with_where({
+                "path": ["conversationId"],
+                "operator": "Equal",
+                "valueString": conversation_id
+            })
+            .with_limit(100)
+            .do()
+        )
+        messages = result.get("data", {}).get("Get", {}).get(context_class, [])
+        messages = sorted(messages, key=lambda x: x["timestamp"])
+        # If more than PAIR_LIMIT*2 messages, delete the oldest ones
+        if len(messages) > PAIR_LIMIT * 2:
+            to_delete = messages[:len(messages) - PAIR_LIMIT * 2]
+            for msg in to_delete:
+                try:
+                    client.data_object.delete(
+                        id=msg["id"], class_name=context_class
+                    )
+                except Exception as e:
+                    print(f"Error deleting old context msg: {str(e)}")
+    except Exception as e:
+        print(f"Error trimming context history: {str(e)}")
+
 
 def retrieve_chunks(query, top_k=TOP_K):
-    # Connect to Weaviate HTTP-only (v4)
     client = weaviate.Client("http://localhost:8080")
     model = SentenceTransformer(EMBEDDING_MODEL)
     query_emb = model.encode([query])[0].tolist()
-    # Query both classes separately and combine results
     excel_results = (
         client.query
         .get(WEAVIATE_EXCEL_CLASS_NAME, ["text", "sheet", "row"])
@@ -64,7 +99,6 @@ def retrieve_chunks(query, top_k=TOP_K):
         .with_additional(["distance"])
         .do()
     )
-    
     doc_results = (
         client.query
         .get(WEAVIATE_DOCUMENT_CLASS_NAME, ["text", "sheet", "row"])
@@ -73,12 +107,10 @@ def retrieve_chunks(query, top_k=TOP_K):
         .with_additional(["distance"])
         .do()
     )
-    # Collect hits from both classes
     chunks = []
     excel_hits = excel_results.get("data", {}).get("Get", {}).get(WEAVIATE_EXCEL_CLASS_NAME, [])
     doc_hits = doc_results.get("data", {}).get("Get", {}).get(WEAVIATE_DOCUMENT_CLASS_NAME, [])
     all_hits = excel_hits + doc_hits
-    
     for hit in all_hits:
         chunks.append({
             "text": hit.get("text"),
@@ -88,9 +120,7 @@ def retrieve_chunks(query, top_k=TOP_K):
         })
     return chunks
 
-
-def build_prompt(context_chunks, user_query,conversation_history):
-    # Format conversation history
+def build_prompt(context_chunks, user_query, conversation_history):
     history_txt = ""
     for msg in conversation_history:
         history_txt += f"{msg['role'].capitalize()}: {msg['content']}\n"
@@ -125,26 +155,26 @@ def call_llm(prompt, model=DEFAULT_MODEL):
     )
     return response.choices[0].message.content
 
-def answer_query(user_query,conversation_id,user_id):
+def answer_query(user_query, conversation_id, user_id):
     start = time.time()
-    history = get_context_history(conversation_id)
     store_context(user_query, "user", conversation_id, user_id)
+    history = get_context_history(conversation_id)
+    # Remove older pairs if needed
+    trim_context_history_if_needed(conversation_id)
 
     retrieved_chunks = retrieve_chunks(user_query)
-    # Filter out poor matches (distance >= 0.60)
     filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.60]
-    # Sort chunks by similarity score (distance ascending)
     sorted_chunks = sorted(
         filtered_chunks,
         key=lambda c: c.get('distance') if c.get('distance') is not None else float('inf')
     )
 
-    prompt = build_prompt(sorted_chunks, user_query,history)
+    prompt = build_prompt(sorted_chunks, user_query, history)
     answer = call_llm(prompt)
     store_context(answer, "assistant", conversation_id, user_id)
+    trim_context_history_if_needed(conversation_id)
     latency = time.time() - start
     sources = [(c['sheet'], c['row']) for c in sorted_chunks]
-
 
     return {
         "answer": answer,
@@ -152,4 +182,3 @@ def answer_query(user_query,conversation_id,user_id):
         "chunks": sorted_chunks,
         "latency": latency
     }
-
