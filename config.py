@@ -17,7 +17,7 @@ WEAVIATE_URL = "http://localhost:8080"  # needs to be updated hosted elsewhere
 
 WEAVIATE_EXCEL_CLASS_NAME = "ExcelChunks"
 WEAVIATE_DOCUMENT_CLASS_NAME = "DocumentChunks"
-
+MEMORY_CLASS = "Context_v1"
 
 # LLM settings
 # AZURE_API_KEY = "YOUR_AZURE_API_KEY" 
