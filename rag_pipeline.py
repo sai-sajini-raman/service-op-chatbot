@@ -3,25 +3,38 @@ import os
 import time
 from sentence_transformers import SentenceTransformer
 import weaviate
-from config import WEAVIATE_URL, WEAVIATE_CLASS_NAME, EMBEDDING_MODEL, TOP_K, SYSTEM_PROMPT, DEFAULT_MODEL, FALLBACK_MODEL
+from config import WEAVIATE_URL, WEAVIATE_EXCEL_CLASS_NAME,WEAVIATE_DOCUMENT_CLASS_NAME, EMBEDDING_MODEL, TOP_K, SYSTEM_PROMPT, DEFAULT_MODEL, FALLBACK_MODEL
 
 def retrieve_chunks(query, top_k=TOP_K):
     # Connect to Weaviate HTTP-only (v4)
     client = weaviate.Client("http://localhost:8080")
     model = SentenceTransformer(EMBEDDING_MODEL)
     query_emb = model.encode([query])[0].tolist()
-    # Use legacy HTTP query API to avoid gRPC errors
-    results = (
+    # Query both classes separately and combine results
+    excel_results = (
         client.query
-        .get(WEAVIATE_CLASS_NAME, ["text", "sheet", "row"])
+        .get(WEAVIATE_EXCEL_CLASS_NAME, ["text", "sheet", "row"])
         .with_near_vector({"vector": query_emb})
         .with_limit(top_k)
         .with_additional(["distance"])
         .do()
     )
-    hits = results.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
+    
+    doc_results = (
+        client.query
+        .get(WEAVIATE_DOCUMENT_CLASS_NAME, ["text", "sheet", "row"])
+        .with_near_vector({"vector": query_emb})
+        .with_limit(top_k)
+        .with_additional(["distance"])
+        .do()
+    )
+    # Collect hits from both classes
     chunks = []
-    for hit in hits:
+    excel_hits = excel_results.get("data", {}).get("Get", {}).get(WEAVIATE_EXCEL_CLASS_NAME, [])
+    doc_hits = doc_results.get("data", {}).get("Get", {}).get(WEAVIATE_DOCUMENT_CLASS_NAME, [])
+    all_hits = excel_hits + doc_hits
+    
+    for hit in all_hits:
         chunks.append({
             "text": hit.get("text"),
             "sheet": hit.get("sheet"),
@@ -29,6 +42,7 @@ def retrieve_chunks(query, top_k=TOP_K):
             "distance": hit.get("_additional", {}).get("distance")
         })
     return chunks
+
 
 def build_prompt(context_chunks, user_query):
     context = "\n".join([f"[{c['sheet']}:{c['row']}] {c['text']}" for c in context_chunks])
@@ -60,9 +74,11 @@ def call_llm(prompt, model=DEFAULT_MODEL):
 def answer_query(user_query):
     start = time.time()
     retrieved_chunks = retrieve_chunks(user_query)
+    # Filter out poor matches (distance >= 0.60)
+    filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.60]
     # Sort chunks by similarity score (distance ascending)
     sorted_chunks = sorted(
-        retrieved_chunks,
+        filtered_chunks,
         key=lambda c: c.get('distance') if c.get('distance') is not None else float('inf')
     )
     prompt = build_prompt(sorted_chunks, user_query)
@@ -76,3 +92,4 @@ def answer_query(user_query):
         "chunks": sorted_chunks,
         "latency": latency
     }
+from ingest import create_class_if_not_exists

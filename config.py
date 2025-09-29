@@ -15,7 +15,9 @@ CHROMA_COLLECTION_NAME = "excel_chunks_ingest_v2"
 # Weaviate settings
 WEAVIATE_URL = "http://localhost:8080"  # needs to be updated hosted elsewhere
 
-WEAVIATE_CLASS_NAME = "Excelpdfchunks_v4"
+WEAVIATE_EXCEL_CLASS_NAME = "ExcelChunks"
+WEAVIATE_DOCUMENT_CLASS_NAME = "DocumentChunks"
+
 
 # LLM settings
 # AZURE_API_KEY = "YOUR_AZURE_API_KEY" 
@@ -24,7 +26,7 @@ DEFAULT_MODEL = "gpt-4.1-mini"
 FALLBACK_MODEL = "gpt-4.1"
 
 # Retrieval settings
-TOP_K = 5 # --------- DEBUG: Increased for candidate inspection ---------
+TOP_K = 20 # --------- DEBUG: Increased for candidate inspection ---------
 
 # System prompt for LLM
 SYSTEM_PROMPT = """You are a helpful assistant. Answer using the provided context and user query. Give good structured output that can be easily understood by the user. 

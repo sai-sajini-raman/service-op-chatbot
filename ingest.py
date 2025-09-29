@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 import weaviate
-from config import EMBEDDING_MODEL, WEAVIATE_CLASS_NAME, WEAVIATE_URL
+from config import EMBEDDING_MODEL, WEAVIATE_EXCEL_CLASS_NAME, WEAVIATE_DOCUMENT_CLASS_NAME, WEAVIATE_URL
 
 import pdfplumber
 import docx
@@ -63,26 +63,36 @@ def parse_to_chunks(file_path):
     return chunks
 
 def parse_all_data_folder():
-    """Detects all supported files in data/ and parses them to chunks."""
+    """Detects all supported files in data/ and parses them to chunks, grouped by file type."""
     data_dir = os.path.abspath("data")
     if not os.path.exists(data_dir):
         raise FileNotFoundError(f"Data folder not found: {data_dir}")
-    chunks = []
+    
+    excel_chunks = []
+    other_chunks = []
+    
     for fname in os.listdir(data_dir):
         if fname.lower().endswith(('.xlsx', '.xls', '.pdf', '.docx')):
             file_path = os.path.join(data_dir, fname)
-            chunks.extend(parse_to_chunks(file_path))
-    if not chunks:
+            chunks = parse_to_chunks(file_path)
+            
+            # Separate Excel files from others
+            if fname.lower().endswith(('.xlsx', '.xls')):
+                excel_chunks.extend(chunks)
+            else:
+                other_chunks.extend(chunks)
+    
+    if not excel_chunks and not other_chunks:
         raise ValueError("No supported files found or no data parsed in the data folder.")
-    return chunks
+    
+    return excel_chunks, other_chunks
 
-def ingest_to_weaviate(chunks):
-    """Ingest chunks into Weaviate v4."""
-    client = weaviate.Client("http://localhost:8080")
+def create_class_if_not_exists(client, class_name):
+    """Create a Weaviate class if it doesn't exist."""
     existing_classes = [cls["class"] for cls in client.schema.get()["classes"]]
-    if WEAVIATE_CLASS_NAME not in existing_classes:
+    if class_name not in existing_classes:
         class_obj = {
-            "class": WEAVIATE_CLASS_NAME,
+            "class": class_name,
             "properties": [
                 {"name": "text", "dataType": ["text"]},
                 {"name": "sheet", "dataType": ["text"]},
@@ -90,24 +100,60 @@ def ingest_to_weaviate(chunks):
             ]
         }
         client.schema.create_class(class_obj)
+
+def ingest_to_weaviate_by_type(excel_chunks, other_chunks):
+    """Ingest chunks into separate Weaviate classes by file type."""
+    from config import WEAVIATE_EXCEL_CLASS_NAME, WEAVIATE_DOCUMENT_CLASS_NAME
+    
+    client = weaviate.Client("http://localhost:8080")
     model = SentenceTransformer(EMBEDDING_MODEL)
-    for chunk in chunks:
-        embedding = model.encode([chunk["text"]])[0].tolist()
-        resp = client.data_object.create(
-            data_object={
-                "text": chunk["text"],
-                "sheet": chunk["sheet"],
-                "row": int(chunk["row"])
-            },
-            class_name=WEAVIATE_CLASS_NAME,
-            vector=embedding
-        )
-    return len(chunks)
+    
+    # Use class names from config
+    excel_class = WEAVIATE_EXCEL_CLASS_NAME
+    other_class = WEAVIATE_DOCUMENT_CLASS_NAME
+    
+    total_count = 0
+    
+    # Ingest Excel chunks
+    if excel_chunks:
+        create_class_if_not_exists(client, excel_class)
+        for chunk in excel_chunks:
+            embedding = model.encode([chunk["text"]])[0].tolist()
+            client.data_object.create(
+                data_object={
+                    "text": chunk["text"],
+                    "sheet": chunk["sheet"],
+                    "row": int(chunk["row"])
+                },
+                class_name=excel_class,
+                vector=embedding
+            )
+        total_count += len(excel_chunks)
+        print(f"✅ Ingested {len(excel_chunks)} Excel chunks into '{excel_class}'")
+    
+    # Ingest other file chunks
+    if other_chunks:
+        create_class_if_not_exists(client, other_class)
+        for chunk in other_chunks:
+            embedding = model.encode([chunk["text"]])[0].tolist()
+            client.data_object.create(
+                data_object={
+                    "text": chunk["text"],
+                    "sheet": chunk["sheet"],
+                    "row": int(chunk["row"])
+                },
+                class_name=other_class,
+                vector=embedding
+            )
+        total_count += len(other_chunks)
+        print(f"✅ Ingested {len(other_chunks)} document chunks into '{other_class}'")
+    
+    return total_count
 
 def main():
-    chunks = parse_all_data_folder()
-    count = ingest_to_weaviate(chunks)
-    print(f"✅ Ingested {count} chunks from all supported files in 'data' into Weaviate.")
+    excel_chunks, other_chunks = parse_all_data_folder()
+    count = ingest_to_weaviate_by_type(excel_chunks, other_chunks)
+    print(f"✅ Ingested {count} total chunks into separate Weaviate classes.")
 
 if __name__ == "__main__":
     main()
