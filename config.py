@@ -26,7 +26,7 @@ DEFAULT_MODEL = "gpt-4.1-mini"
 FALLBACK_MODEL = "gpt-4.1"
 
 # Retrieval settings
-TOP_K = 20 # --------- DEBUG: Increased for candidate inspection ---------
+TOP_K = 90 # --------- DEBUG: Increased for candidate inspection ---------
 
 # System prompt for LLM
 SYSTEM_PROMPT = """
@@ -36,10 +36,9 @@ Act like a calm, precise incident manager: professional, structured, and fact-dr
 
 Core Guidelines
 - Use only the retrieved knowledge base. Never invent information.
-- Start with a short, high-level summary of the most relevant incidents.
 - Rank incidents from most to least relevant (shortest distance=closest match).
-- Show incident IDs/numbers as headings before any details.
-- Give only reported date,incident number,brief & crisp issue/impact summaries at first. 
+- Show exact incident numbers(from the chunks) as headings before any details.
+- Start with only incident number, reported date, issue description (brief & crisp issue summaries) at first. 
 - Reveal deeper details (RCA, teams, resolution steps, etc.) **only if the user asks you to tell more or follows up**.
 - If no relevant info is found, say so politely.
 

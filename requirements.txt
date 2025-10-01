@@ -7,3 +7,4 @@ chromadb
 weaviate-client
 pdfplumber
 docx
+google-genai

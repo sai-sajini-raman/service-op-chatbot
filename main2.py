@@ -131,20 +131,20 @@ for idx, msg in enumerate(st.session_state["chat_history"]):
             unsafe_allow_html=True,
         )
         # Show sources bubble for the bot message
-        if len(st.session_state["sources_history"]) > idx // 2:
-            sources = st.session_state["sources_history"][idx // 2]
-            if sources and len(sources) > 0:
-                sources_html = ""
-                for chunk in sources:
-                    sheet = chunk.get("sheet")
-                    row = chunk.get("row")
-                    dist = chunk.get("distance")
-                    text = chunk.get("text", "")[:100]
-                    sources_html += f'<div>`{sheet}` | Row: `{row}` | Distance: `{dist:.4f}`<br>Text: {text}...</div><hr style="margin:2px 0">'
-                st.markdown(
-                    f'<div class="sources-bubble">{sources_html}</div>',
-                    unsafe_allow_html=True,
-                )
+        # if len(st.session_state["sources_history"]) > idx // 2:
+        #     sources = st.session_state["sources_history"][idx // 2]
+        #     if sources and len(sources) > 0:
+        #         sources_html = ""
+        #         for chunk in sources:
+        #             sheet = chunk.get("sheet")
+        #             row = chunk.get("row")
+        #             dist = chunk.get("distance")
+        #             text = chunk.get("text", "")[:100]
+        #             sources_html += f'<div>`{sheet}` | Row: `{row}` | Distance: `{dist:.4f}`<br>Text: {text}...</div><hr style="margin:2px 0">'
+        #         st.markdown(
+        #             f'<div class="sources-bubble">{sources_html}</div>',
+        #             unsafe_allow_html=True,
+        #         )
     else:
         st.markdown(
             f'<div class="chat-bubble-right">{msg["content"]}</div>',
@@ -153,8 +153,32 @@ for idx, msg in enumerate(st.session_state["chat_history"]):
     st.markdown('<div style="clear:both;"></div>', unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
 
-if st.session_state.get("latency") is not None:
-    st.markdown(f"**Response time:** {st.session_state['latency']:.2f} seconds")
+# if st.session_state.get("latency") is not None:
+#     st.markdown(f"**Response time:** {st.session_state['latency']:.2f} seconds")
+
+
+# --- Message Sending Logic Refactored ---
+def send_message():
+    user_query = st.session_state.get("user_query", "")
+    if user_query:
+        with st.spinner("Retrieving answer..."):
+            try:
+                result = answer_query(
+                    user_query,
+                    st.session_state["conversation_id"],
+                    st.session_state["user_id"],
+                )
+                st.session_state["chat_history"].append({"role": "user", "content": user_query})
+                st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"]})
+                st.session_state["sources_history"].append(result["chunks"])
+                st.session_state["latency"] = result["latency"]
+                st.session_state["user_query"] = ""  # Clear input after sending
+                st.session_state["clear_input"] = True  # Set flag to clear input box
+                st.rerun()  # This reruns so the input clears and message appears immediately
+            except Exception as e:
+                st.session_state["user_query"] = ""  # Ensure input is cleared on error
+                st.session_state["clear_input"] = True
+                st.error(f"Error: {e}")
 
 # --- Fixed input field at bottom ---
 input_placeholder = st.empty()
@@ -165,14 +189,20 @@ with input_placeholder.container():
     if st.session_state["clear_input"]:
         user_query = col1.text_input(
             "Type your message...", value="", key="bottom_input",
-            label_visibility="collapsed", placeholder="Ask your question...")
+            label_visibility="collapsed", placeholder="Ask your question...",
+            on_change=send_message)
         st.session_state["clear_input"] = False  # Reset flag
     else:
         user_query = col1.text_input(
             "Type your message...", value=st.session_state.get("user_query", ""),
-            key="bottom_input", label_visibility="collapsed", placeholder="Ask your question...")
+            key="bottom_input", label_visibility="collapsed", placeholder="Ask your question...",
+            on_change=send_message)
     send_clicked = col2.button("➤", key="send_btn", help="Send your message")
     st.markdown('</div>', unsafe_allow_html=True)
+
+# --- Message Sending Logic for Button ---
+if send_clicked:
+    send_message()
 
 # --- Message Sending Logic ---
 if send_clicked and user_query:

@@ -134,26 +134,33 @@ def build_prompt(context_chunks, user_query, conversation_history):
     return prompt
 
 def call_llm(prompt, model=DEFAULT_MODEL):
-    from azure.ai.inference import ChatCompletionsClient
-    from azure.ai.inference.models import SystemMessage, UserMessage
-    from azure.core.credentials import AzureKeyCredential
+    import os
+    from dotenv import load_dotenv
+    from google import genai
+    from google.genai import types
 
-    endpoint = "https://models.github.ai/inference"
-    token = os.environ.get("GITHUB_TOKEN")
-    if not token:
-        raise ValueError("Missing GITHUB_TOKEN environment variable.")
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is required")
 
-    model_name = "openai/gpt-4o" if model == DEFAULT_MODEL else "openai/gpt-4.1"
+    client = genai.Client(api_key=api_key)
+    model_name = "gemini-2.5-pro"  # You can make this configurable if needed
 
-    client = ChatCompletionsClient(endpoint=endpoint, credential=AzureKeyCredential(token))
-    response = client.complete(
-        messages=[SystemMessage(SYSTEM_PROMPT), UserMessage(prompt)],
-        temperature=1.0,
-        top_p=1.0,
-        max_tokens=1000,
-        model=model_name
-    )
-    return response.choices[0].message.content
+    # Gemini expects contents as a list of strings (the prompt)
+    try:
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[prompt],
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.9,
+                top_k=40,
+            ),
+        )
+        return response.text.strip() if response.text else "No response text returned."
+    except Exception as e:
+        return f"Error generating response: {str(e)}"
 
 def answer_query(user_query, conversation_id, user_id):
     start = time.time()
@@ -163,7 +170,7 @@ def answer_query(user_query, conversation_id, user_id):
     trim_context_history_if_needed(conversation_id)
 
     retrieved_chunks = retrieve_chunks(user_query)
-    filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.60]
+    filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.8]
     sorted_chunks = sorted(
         filtered_chunks,
         key=lambda c: c.get('distance') if c.get('distance') is not None else float('inf')
