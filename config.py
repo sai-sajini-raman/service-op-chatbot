@@ -1,5 +1,6 @@
 # config.py
-
+#////YWZ3WW9rbE1EN3lUYkNoK183VWwySnpoSDhRU1MrZDZvc2lxS3VBdHcxVnRicTNmd2ZqOVlRMkxxVXp3PV92////////////MjAw
+#qljwde2qn6gcecmnaeyoa.c0.us-west3.gcp.weaviate.cloud
 # Path to the Excel knowledge source
 # EXCEL_PATH = "knowledge.xlsx"
 EXCEL_PATH = "data/"
