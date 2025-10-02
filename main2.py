@@ -88,6 +88,35 @@ st.markdown(
     .send-btn:active {
         color: #0056b3;
     }
+
+    div.stButton > button {
+        background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.12),
+            rgba(255, 255, 255, 0.08)
+        );
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 12px;
+        padding: 16px 22px;
+        font-size: 1em;
+        cursor: pointer;
+        transition: all 0.25s ease-in-out;
+        backdrop-filter: blur(14px) saturate(180%);
+        -webkit-backdrop-filter: blur(14px) saturate(180%);
+        color: #000;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+        text-align: center;
+        min-width: 200px;
+        margin: 6px;
+    }
+
+    div.stButton > button:hover {
+        background: rgba(72, 61, 139, 0.35); /* slateBlue hover */
+        border-color: rgba(72, 61, 139, 0.6);
+        transform: translateY(-3px) scale(1.05);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        color: #fff;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -110,6 +139,10 @@ if "user_query" not in st.session_state:
     st.session_state["user_query"] = ""
 if "clear_input" not in st.session_state:
     st.session_state["clear_input"] = False
+if "pending_query" not in st.session_state:
+    st.session_state["pending_query"] = ""
+if "show_questions" not in st.session_state:
+    st.session_state["show_questions"] = True
 
 # --- New Chat Button Top-Left ---
 new_chat_clicked = st.button("🗑️ New Chat", key="new_chat_btn", help="Start a new conversation", use_container_width=False)
@@ -119,8 +152,27 @@ if new_chat_clicked:
     st.session_state["sources_history"] = []
     st.session_state["latency"] = None
     st.session_state["user_query"] = ""
+    st.session_state["pending_query"] = ""
     st.session_state["clear_input"] = True
+    st.session_state["show_questions"] = True
     st.rerun()  # <-- This reruns so the cleared chat appears immediately
+
+if st.session_state["show_questions"] and not st.session_state["chat_history"]:
+    st.subheader("💡 Try asking:")
+    predefined_questions = [
+        "What is the status of incident INC123?",
+        "Show me today's critical incidents",
+        "Which team is handling the payment failures?",
+        "Give me a summary of recent major incidents"
+    ]
+    cols = st.columns(len(predefined_questions))
+    for i, q in enumerate(predefined_questions):
+        if cols[i].button(q, key=f"pre_q_{i}"):
+            st.session_state["user_query"] = q
+            st.session_state["clear_input"] = False
+            st.session_state["show_questions"] = False
+            st.session_state["pending_query"] = q
+            st.rerun()
 
 # --- Conversation Chat Bubbles in Scrollable Container ---
 st.markdown("<div class='scrollable-chat'>", unsafe_allow_html=True)
@@ -157,12 +209,13 @@ st.markdown("</div>", unsafe_allow_html=True)
 #     st.markdown(f"**Response time:** {st.session_state['latency']:.2f} seconds")
 
 
-# --- Message Sending Logic Refactored ---
 def send_message():
     user_query = st.session_state.get("user_query", "")
     if user_query:
         with st.spinner("Retrieving answer..."):
             try:
+                # result = "answer"
+                # st.session_state["pending_query"] = user_query
                 result = answer_query(
                     user_query,
                     st.session_state["conversation_id"],
@@ -174,53 +227,24 @@ def send_message():
                 st.session_state["latency"] = result["latency"]
                 st.session_state["user_query"] = ""  # Clear input after sending
                 st.session_state["clear_input"] = True  # Set flag to clear input box
-                st.rerun()  # This reruns so the input clears and message appears immediately
             except Exception as e:
                 st.session_state["user_query"] = ""  # Ensure input is cleared on error
                 st.session_state["clear_input"] = True
                 st.error(f"Error: {e}")
 
-# --- Fixed input field at bottom ---
+# --- Input field at bottom ---
 input_placeholder = st.empty()
 with input_placeholder.container():
     st.markdown('<div class="fixed-bottom-input">', unsafe_allow_html=True)
     col1, col2 = st.columns([12, 1])
-    # Clear the input field if needed (after send or new chat)
-    if st.session_state["clear_input"]:
-        user_query = col1.text_input(
-            "Type your message...", value="", key="bottom_input",
-            label_visibility="collapsed", placeholder="Ask your question...",
-            on_change=send_message)
-        st.session_state["clear_input"] = False  # Reset flag
-    else:
-        user_query = col1.text_input(
-            "Type your message...", value=st.session_state.get("user_query", ""),
-            key="bottom_input", label_visibility="collapsed", placeholder="Ask your question...",
-            on_change=send_message)
-    send_clicked = col2.button("➤", key="send_btn", help="Send your message")
+
+    col1.text_input(
+        "Type your message...",
+        key="user_query",
+        label_visibility="collapsed",
+        placeholder="Ask your question...",
+        on_change=send_message
+    )
+    col2.button("➤", key="send_btn", help="Send your message", on_click=send_message)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- Message Sending Logic for Button ---
-if send_clicked:
-    send_message()
-
-# --- Message Sending Logic ---
-if send_clicked and user_query:
-    with st.spinner("Retrieving answer..."):
-        try:
-            result = answer_query(
-                user_query,
-                st.session_state["conversation_id"],
-                st.session_state["user_id"],
-            )
-            st.session_state["chat_history"].append({"role": "user", "content": user_query})
-            st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"]})
-            st.session_state["sources_history"].append(result["chunks"])
-            st.session_state["latency"] = result["latency"]
-            st.session_state["user_query"] = ""  # Clear input after sending
-            st.session_state["clear_input"] = True  # Set flag to clear input box
-            st.rerun()  # This reruns so the input clears and message appears immediately
-        except Exception as e:
-            st.session_state["user_query"] = ""  # Ensure input is cleared on error
-            st.session_state["clear_input"] = True
-            st.error(f"Error: {e}")

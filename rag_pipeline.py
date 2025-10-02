@@ -122,10 +122,14 @@ def retrieve_chunks(query, top_k=TOP_K):
 
 def build_prompt(context_chunks, user_query, conversation_history):
     history_txt = ""
+    from datetime import date
+    today = date.today()
+  
     for msg in conversation_history:
         history_txt += f"{msg['role'].capitalize()}: {msg['content']}\n"
     context = "\n".join([f"[{c['sheet']}:{c['row']}] {c['text']}" for c in context_chunks])
     prompt = (
+        f"{today}\n"
         f"{SYSTEM_PROMPT}\n\n"
         f"Conversation History:\n{history_txt}\n"
         f"Context:\n{context}\n\n"
@@ -133,7 +137,7 @@ def build_prompt(context_chunks, user_query, conversation_history):
     )
     return prompt
 
-def call_llm(prompt, model=DEFAULT_MODEL):
+def call_llm(prompt):
     import os
     from dotenv import load_dotenv
     from google import genai
@@ -164,6 +168,7 @@ def call_llm(prompt, model=DEFAULT_MODEL):
 
 def answer_query(user_query, conversation_id, user_id):
     start = time.time()
+   
     store_context(user_query, "user", conversation_id, user_id)
     history = get_context_history(conversation_id)
     # Remove older pairs if needed
