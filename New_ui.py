@@ -212,14 +212,15 @@ if st.session_state["welcome"]:
 
 
 # --- Predefined Question Cards ---
+pending = bool(st.session_state.get("pending_query"))
 if st.session_state["show_questions"]:
 # and not st.session_state["chat_history"]:
     st.subheader("💡 Try asking:")
     predefined_questions = [
-        "What is the status of incident INC123?",
+        "Give me last 6 months's Foods portfolio incidents",
         "Show me today's critical incidents",
-        "List the major incidents in the past year",
-        "Give me a summary of recent major incidents"
+        "I am facing NDC allocation issues. What do I do?",
+        "Donnington ecomm order fulfillment issue. What are the possible root causes?"
     ]
 
     cols = st.columns(len(predefined_questions))
@@ -240,15 +241,16 @@ if st.session_state["show_questions"]:
 # --- New Chat Button  ---
 
 if not st.session_state["welcome"] and not st.session_state["show_questions"]:
-    home_clicked = st.button("🏠 Home", key="home_btn", help="Go to home screen", use_container_width=False)
+
+    home_clicked = st.button("🏠 Home", key="home_btn", help="Go to home screen", use_container_width=False, disabled=pending)
     if home_clicked:
         st.session_state["chat_history"] = []
         st.session_state["show_questions"] = True
         st.session_state["welcome"] = True
         st.rerun()
 
-new_chat_clicked = st.button("New Chat", key="new_chat_btn", help="Start a new conversation", use_container_width=False)
 
+new_chat_clicked = st.button("New Chat", key="new_chat_btn", help="Start a new conversation", use_container_width=False, disabled=pending)
 if new_chat_clicked:
     st.session_state["conversation_id"] = str(uuid.uuid4())
     st.session_state["chat_history"] = []
@@ -267,17 +269,30 @@ for idx, msg in enumerate(st.session_state["chat_history"]):
         st.markdown(f'<div class="chat-bubble-user">{msg["content"]}</div>', unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="chat-bubble-assistant">{msg["content"]}</div>', unsafe_allow_html=True)
-        # if len(st.session_state["sources_history"]) > idx // 2:
-        #     sources = st.session_state["sources_history"][idx // 2]
-        # if sources and len(sources) > 0:
-        #     sources_html = ""
-        #     for chunk in sources:
-        #         sheet = chunk.get("sheet")
-        #         row = chunk.get("row")
-        #         dist = chunk.get("distance")
-        #         text = chunk.get("text", "")[:100]
-        #         sources_html += f'<div>`{sheet}` | Row: `{row}` | Distance: `{dist:.4f}`<br>Text: {text}...</div><hr style="margin:2px 0">'
-        #     st.markdown(f'<div class="sources-bubble">{sources_html}</div>', unsafe_allow_html=True)
+        # --- Retrieved chunks display is commented out ---
+        # # --- Show retrieved chunks and sources for this assistant response ---
+        # # Find the corresponding result if available
+        # # We'll use sources_history to store the chunks for each assistant response
+        # ai_idx = [i for i, m in enumerate(st.session_state["chat_history"][:idx+1]) if m["role"] == "assistant"]
+        # if "sources_history" in st.session_state and ai_idx:
+        #     # Map assistant message index to sources_history index
+        #     src_idx = len(ai_idx) - 1
+        #     if src_idx < len(st.session_state["sources_history"]):
+        #         chunks = st.session_state["sources_history"][src_idx]
+        #         if chunks and len(chunks) > 0:
+        #             sources_html = ""
+        #             for chunk in chunks:
+        #                 sheet = chunk.get("sheet")
+        #                 row = chunk.get("row")
+        #                 dist = chunk.get("distance")
+        #                 text = chunk.get("text", "")[:120]
+        #                 sources_html += f'<div>`{sheet}` | Row: `{row}` | Distance: `{dist:.4f}`<br>Text: {text}...</div><hr style="margin:2px 0">'
+        #             st.markdown(f'<div class="sources-bubble"><b>Retrieved Chunks:</b><br>{sources_html}</div>', unsafe_allow_html=True)
+        #         else:
+        #             st.markdown(f'<div class="sources-bubble">No retrieved chunks for this response.</div>', unsafe_allow_html=True)
+        # # Show latency if available
+        if "latency" in st.session_state and st.session_state["latency"] is not None:
+            st.markdown(f"⏱️ <b>Response time:</b> {st.session_state['latency']:.2f} seconds", unsafe_allow_html=True)
 
 # if st.session_state.get("latency") is not None:
 #     st.markdown(f"⏱️ **Response time:** {st.session_state['latency']:.2f} seconds")
@@ -307,12 +322,16 @@ if st.session_state["pending_query"]:
     # time.sleep(2)  # Delay before showing the message
     st.markdown(f'<div class="chat-bubble-assistant">{"Retrieving answer..."}</div>', unsafe_allow_html=True)
     try:
-        # result = {"answer": "Answer"}
         result = answer_query(
                         st.session_state["pending_query"],
                         st.session_state["conversation_id"],
                         st.session_state["user_id"],
                     )
+        # Store chunks for this response for debug display
+        if "sources_history" not in st.session_state:
+            st.session_state["sources_history"] = []
+        st.session_state["sources_history"].append(result.get("chunks", []))
+        st.session_state["latency"] = result.get("latency")
         st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"]})
         st.session_state["pending_query"] = ""  # clear
         st.rerun()

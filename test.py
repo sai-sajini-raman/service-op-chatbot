@@ -23,10 +23,15 @@ def main():
             print("Exiting chat.")
             break
         result = answer_query(user_query, conversation_id, user_id)
+        chunks = result.get('chunks', [])
+        print(f"\n[INFO] Number of chunks sent to LLM: {len(chunks)}")
+        print("[INFO] Top K chunks sent to LLM:")
+        for i, chunk in enumerate(chunks):
+            print(f"  {i+1}. Sheet: {chunk.get('sheet')}, Row: {chunk.get('row')}, Distance: {chunk.get('distance'):.4f}\n     Text: {str(chunk.get('text'))[:200]}{'...' if len(str(chunk.get('text'))) > 200 else ''}")
         print("\n--- BOT OUTPUT ---")
         print(result["answer"])
         print("\n--- SOURCES ---")
-        for chunk in result.get("chunks", []):
+        for chunk in chunks:
             print(f"Sheet: {chunk.get('sheet')}, Row: {chunk.get('row')}, Distance: {chunk.get('distance'):.4f}")
         print("\n--- LATENCY ---")
         print(f"{result['latency']:.2f} seconds\n")

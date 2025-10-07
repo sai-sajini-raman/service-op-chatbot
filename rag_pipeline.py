@@ -124,16 +124,26 @@ def build_prompt(context_chunks, user_query, conversation_history):
     history_txt = ""
     from datetime import date
     today = date.today()
-  
+    previous_query = ""
     for msg in conversation_history:
         history_txt += f"{msg['role'].capitalize()}: {msg['content']}\n"
-    context = "\n".join([f"[{c['sheet']}:{c['row']}] {c['text']}" for c in context_chunks])
+        if msg['role'] == 'user':
+            previous_query += f"{msg['content']} + "
+
+    # Special handling: if context_chunks is a single dict from Excel row, format nicely
+    if len(context_chunks) == 1 and isinstance(context_chunks[0]['text'], dict):
+        row = context_chunks[0]['text']
+        context = "\n".join([f"**{k}:** {v}" for k, v in row.items()])
+    else:
+        context = "\n".join([f"[{c['sheet']}:{c['row']}] {c['text']}" for c in context_chunks])
+
     prompt = (
         f"{today}\n"
         f"{SYSTEM_PROMPT}\n\n"
         f"Conversation History:\n{history_txt}\n"
         f"Context:\n{context}\n\n"
         f"User Query: {user_query}"
+        f"Answer the 'User Query' using the above 'Context' to answer the query and 'Conversation History' to maintain conversation."
     )
     return prompt
 
@@ -149,7 +159,7 @@ def call_llm(prompt):
         raise ValueError("GEMINI_API_KEY environment variable is required")
 
     client = genai.Client(api_key=api_key)
-    model_name = "gemini-2.5-pro"  # You can make this configurable if needed
+    model_name = "gemini-2.0-flash"  # You can make this configurable if needed
 
     # Gemini expects contents as a list of strings (the prompt)
     try:
@@ -166,28 +176,68 @@ def call_llm(prompt):
     except Exception as e:
         return f"Error generating response: {str(e)}"
 
+import re
+import pandas as pd
 def answer_query(user_query, conversation_id, user_id):
     start = time.time()
-   
     store_context(user_query, "user", conversation_id, user_id)
     history = get_context_history(conversation_id)
-    # Remove older pairs if needed
     trim_context_history_if_needed(conversation_id)
 
+    # Regex for all "incident" + 8 digits
+    matches = re.findall(r'incident[\s:-]*(\d{8})', user_query, re.IGNORECASE)
+    if matches:
+        incident_numbers = set(matches)
+        import glob
+        context_chunks = []
+        sources = []
+        excel_files = glob.glob('data/*.xlsx')
+        for incident_number in incident_numbers:
+            found = False
+            for excel_path in excel_files:
+                try:
+                    df = pd.read_excel(excel_path)
+                    if 'Incident' not in df.columns:
+                        continue
+                    row = df[df['Incident'] == int(incident_number)]
+                    if not row.empty:
+                        context_chunks.append({
+                            "text": row.iloc[0].to_dict(),
+                            "sheet": excel_path,
+                            "row": int(row.index[0]),
+                            "distance": 0.0
+                        })
+                        sources.append((excel_path, int(row.index[0])))
+                        found = True
+                        break  # Stop after first match for this incident number
+                except Exception as e:
+                    print(f"Excel lookup failed in {excel_path}: {e}")
+        if context_chunks:
+            prompt = build_prompt(context_chunks, user_query, history)
+            answer = call_llm(prompt)
+            store_context(answer, "assistant", conversation_id, user_id)
+            trim_context_history_if_needed(conversation_id)
+            latency = time.time() - start
+            return {
+                "answer": answer,
+                "sources": sources,
+                "chunks": context_chunks,
+                "latency": latency
+            }
+
+    # Fallback to embedding search
     retrieved_chunks = retrieve_chunks(user_query)
     filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.8]
     sorted_chunks = sorted(
         filtered_chunks,
         key=lambda c: c.get('distance') if c.get('distance') is not None else float('inf')
     )
-
     prompt = build_prompt(sorted_chunks, user_query, history)
     answer = call_llm(prompt)
     store_context(answer, "assistant", conversation_id, user_id)
     trim_context_history_if_needed(conversation_id)
     latency = time.time() - start
     sources = [(c['sheet'], c['row']) for c in sorted_chunks]
-
     return {
         "answer": answer,
         "sources": sources,
