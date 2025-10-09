@@ -6,5 +6,5 @@ openpyxl
 chromadb
 weaviate-client
 pdfplumber
-docx
+python-docx
 google-genai

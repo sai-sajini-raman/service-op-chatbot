@@ -159,7 +159,7 @@ def call_llm(prompt):
         raise ValueError("GEMINI_API_KEY environment variable is required")
 
     client = genai.Client(api_key=api_key)
-    model_name = "gemini-2.0-flash"  # You can make this configurable if needed
+    model_name = "gemini-2.5-pro"  # You can make this configurable if needed
 
     # Gemini expects contents as a list of strings (the prompt)
     try:

@@ -22,12 +22,24 @@ def parse_to_chunks(file_path):
                 for idx, row in df.iterrows():
                     row_data = {header: row[header] for header in headers}
                     chunk_text = ", ".join([f"{k}: {v}" for k, v in row_data.items() if pd.notnull(v)])
+                    # # Convert incident_date to ISO format
+                    # raw_date = df.loc[idx].get("Reported Date", None)
+                    # incident_date = None
+                    # if pd.notnull(raw_date):
+                    #     try:
+                    #         incident_date = pd.to_datetime(raw_date).date().isoformat()
+                    #     except Exception:
+                    #         incident_date = str(raw_date)
                     if chunk_text.strip():
                         chunks.append({
                             "text": chunk_text,
                             "sheet": sheet_name,
                             "row": idx,
-                            "source_file": os.path.basename(file_path)
+                            "source_file": os.path.basename(file_path),
+                            "portfolio": df.loc[idx].get("Product Portfolio -Area of cause", None),
+                            # "incident_date": incident_date,  # <-- now ISO format
+                            "incident_date": df.iloc[idx].get("Reported Date", None),
+                            "application": df.loc[idx].get("Application/Service Impacted?", None)
                         })
     elif ext == ".pdf":
         with pdfplumber.open(file_path) as pdf:
@@ -96,12 +108,24 @@ def create_class_if_not_exists(client, class_name):
             "properties": [
                 {"name": "text", "dataType": ["text"]},
                 {"name": "sheet", "dataType": ["text"]},
-                {"name": "row", "dataType": ["int"]}
+                {"name": "row", "dataType": ["int"]},
+                {"name": "source_file", "dataType": ["text"]},
+                {"name": "portfolio", "dataType": ["text"]},
+                # {"name": "incident_date", "dataType": ["date"]},
+                {"name": "incident_date", "dataType": ["text"]},
+                {"name": "application", "dataType": ["text"]},
             ]
         }
         client.schema.create_class(class_obj)
 
 def ingest_to_weaviate_by_type(excel_chunks, other_chunks):
+    import math
+
+    def sanitize_value(val):
+        if isinstance(val, float):
+            if math.isnan(val) or math.isinf(val):
+                return None
+        return val
     """Ingest chunks into separate Weaviate classes by file type."""
     from config import WEAVIATE_EXCEL_CLASS_NAME, WEAVIATE_DOCUMENT_CLASS_NAME
     
@@ -121,9 +145,13 @@ def ingest_to_weaviate_by_type(excel_chunks, other_chunks):
             embedding = model.encode([chunk["text"]])[0].tolist()
             client.data_object.create(
                 data_object={
-                    "text": chunk["text"],
-                    "sheet": chunk["sheet"],
-                    "row": int(chunk["row"])
+                    "text": sanitize_value(chunk["text"]),
+                    "sheet": sanitize_value(chunk["sheet"]),
+                    "row": int(chunk["row"]),
+                    "source_file": sanitize_value(chunk.get("source_file")),
+                    "portfolio": sanitize_value(chunk.get("portfolio")),
+                    "incident_date": str(sanitize_value(chunk.get("incident_date"))) if chunk.get("incident_date") is not None else None,
+                    "application": sanitize_value(chunk.get("application"))
                 },
                 class_name=excel_class,
                 vector=embedding
