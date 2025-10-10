@@ -1,17 +1,32 @@
-import pandas as pd
 
-def test_metadata_extraction(excel_path):
-    df = pd.read_excel(excel_path)
-    df.columns = df.columns.str.strip()  # Clean column names
-    print("Columns found:", df.columns.tolist())
-    for idx, row in df.iterrows():
-        incident_date = row.get("Reported Date", None)
-        incident_number = row.get("Incident", None)
-        portfolio = row.get("Product Portfolio -Area of cause", None)
-        print(f"Row {idx}: Incident Date = {incident_date}, Incident Number = {incident_number}, portfolio = {portfolio}")
-        if idx >= 9:  # Show only first 10 rows
-            break
+import weaviate
+from config import WEAVIATE_EXCEL_CLASS_NAME
+
+def print_one_chunk_metadata():
+    client = weaviate.Client("http://localhost:8080")
+    # Query for one chunk
+    result = client.query.get(
+        WEAVIATE_EXCEL_CLASS_NAME,
+        [
+            "incident_date",
+            "incident_number",
+            "incident_category",
+            "problem_record",
+            "portfolio",
+            "application",
+            "sheet",
+            "source_file",
+            "row",
+            "text"
+        ]
+    ).with_limit(1).do()
+    chunk = result.get("data", {}).get("Get", {}).get(WEAVIATE_EXCEL_CLASS_NAME, [])
+    if chunk:
+        print("Metadata for one chunk:")
+        for k, v in chunk[0].items():
+            print(f"{k}: {v}")
+    else:
+        print("No chunks found in Weaviate.")
 
 if __name__ == "__main__":
-    # Replace with your actual Excel file path
-    test_metadata_extraction("data/Major Significant & Key Incidents KB-2.xlsx")
+    print_one_chunk_metadata()

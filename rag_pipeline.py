@@ -107,7 +107,11 @@ def retrieve_chunks(query, top_k=TOP_K, filter_dict=None):
                 "operator": "And",
                 "operands": operands
             }
-    excel_query = client.query.get(WEAVIATE_EXCEL_CLASS_NAME, ["text", "sheet", "row"])
+    metadata_fields = [
+        "text", "sheet", "row", "incident_date", "incident_number", "incident_category",
+        "problem_record", "portfolio", "application", "source_file"
+    ]
+    excel_query = client.query.get(WEAVIATE_EXCEL_CLASS_NAME, metadata_fields)
     if where_clause:
         excel_query = excel_query.with_where(where_clause)
     excel_results = (
@@ -118,7 +122,7 @@ def retrieve_chunks(query, top_k=TOP_K, filter_dict=None):
         .do()
     )
 
-    doc_query = client.query.get(WEAVIATE_DOCUMENT_CLASS_NAME, ["text", "sheet", "row"])
+    doc_query = client.query.get(WEAVIATE_DOCUMENT_CLASS_NAME, metadata_fields)
     # if where_clause:
     #     doc_query = doc_query.with_where(where_clause)
     doc_results = (
@@ -137,6 +141,13 @@ def retrieve_chunks(query, top_k=TOP_K, filter_dict=None):
             "text": hit.get("text"),
             "sheet": hit.get("sheet"),
             "row": hit.get("row"),
+            "incident_date": hit.get("incident_date"),
+            "incident_number": hit.get("incident_number"),
+            "incident_category": hit.get("incident_category"),
+            "problem_record": hit.get("problem_record"),
+            "portfolio": hit.get("portfolio"),
+            "application": hit.get("application"),
+            "source_file": hit.get("source_file"),
             "distance": hit.get("_additional", {}).get("distance")
         })
     return chunks
@@ -177,6 +188,7 @@ def build_filter_prompt(user_query, metadata_dict):
         f"User Query: {user_query}\n\n"
         f"Allowed Metadata Fields and Values:\n{metadata_info}\n\n"
         f"PROVIDE ONLY PORTFOLIO FILTERS. Do not provide any other metadata fields. Provide incident_number filter only if user asks for a specific incident number\n"
+        f"provide filter only if it is available in the provided metadata fields and values\n"
         f"Output a JSON object with field names as keys and lists of relevant values. If no relevant metadata, return an empty JSON object."
         f"Example:\n"
         f"1) User Query: Show allocation issues in Foods portfolio\n"
@@ -301,6 +313,12 @@ def answer_query(user_query, conversation_id, user_id):
     # Fallback to embedding search
     retrieved_chunks = retrieve_chunks(user_query, filter_dict=analysed_json)
     filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.8]
+
+    # Fallback to filterless search if no chunks or filtered chunks are found
+    if len(retrieved_chunks) == 0 or len(filtered_chunks) == 0:
+        retrieved_chunks = retrieve_chunks(user_query, filter_dict=None)
+        filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.8]
+
     sorted_chunks = sorted(
         filtered_chunks,
         key=lambda c: c.get('distance') if c.get('distance') is not None else float('inf')

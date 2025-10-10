@@ -21,7 +21,7 @@ def parse_to_chunks(file_path):
                 headers = df.columns.tolist()
                 df.columns = df.columns.str.strip()
                 for idx, row in df.iterrows():
-                    row_data = {header: row[header] for header in headers}
+                    row_data = {header: row.get(header, None) for header in headers}
                     chunk_text = ", ".join([f"{k}: {v}" for k, v in row_data.items() if pd.notnull(v)])
                     # # Convert incident_date to ISO format
                     # raw_date = df.loc[idx].get("Reported Date", None)
