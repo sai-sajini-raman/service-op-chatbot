@@ -8,3 +8,7 @@ weaviate-client
 pdfplumber
 python-docx
 google-genai
+fitz
+pillow
+pytesseract
+pymupdf

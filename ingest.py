@@ -6,6 +6,10 @@ from config import EMBEDDING_MODEL, WEAVIATE_EXCEL_CLASS_NAME, WEAVIATE_DOCUMENT
 
 import pdfplumber
 import docx
+import fitz
+import pytesseract
+from PIL import Image
+import io
 
 def parse_to_chunks(file_path):
     """Parse the file at file_path into text chunks depending on type (Excel, PDF, Word), including column headers in chunk text for tabular data."""
@@ -19,42 +23,51 @@ def parse_to_chunks(file_path):
             for sheet_name in xls.sheet_names:
                 df = pd.read_excel(xls, sheet_name=sheet_name)
                 headers = df.columns.tolist()
+                def get_first_available(row, columns):
+                    for col in columns:
+                        if col in row and pd.notnull(row[col]):
+                            return row[col]
+                    return None
+
                 for idx, row in df.iterrows():
                     row_data = {header: row[header] for header in headers}
                     chunk_text = ", ".join([f"{k}: {v}" for k, v in row_data.items() if pd.notnull(v)])
-                    # # Convert incident_date to ISO format
-                    # raw_date = df.loc[idx].get("Reported Date", None)
-                    # incident_date = None
-                    # if pd.notnull(raw_date):
-                    #     try:
-                    #         incident_date = pd.to_datetime(raw_date).date().isoformat()
-                    #     except Exception:
-                    #         incident_date = str(raw_date)
+
+                    # Metadata extraction with fallback columns
+                    incident_number = get_first_available(row, ["Incident", "Incident Reference"])
+                    incident_date = get_first_available(row, ["Reported Date", "Incident Reported Date"])
+                    portfolio = get_first_available(row, ["Product Portfolio -Area of cause", "Portfolio Impacted"])
+                    application = get_first_available(row, ["Application/Service Impacted?"])
+
                     if chunk_text.strip():
                         chunks.append({
                             "text": chunk_text,
                             "sheet": sheet_name,
                             "row": idx,
                             "source_file": os.path.basename(file_path),
-                            "portfolio": df.loc[idx].get("Product Portfolio -Area of cause", None),
-                            # "incident_date": incident_date,  # <-- now ISO format
-                            "incident_date": df.iloc[idx].get("Reported Date", None),
-                            "application": df.loc[idx].get("Application/Service Impacted?", None)
+                            "portfolio": portfolio,
+                            "incident_date": incident_date,
+                            "incident_number": incident_number,
+                            "application": application
                         })
     elif ext == ".pdf":
-        with pdfplumber.open(file_path) as pdf:
-            for i, page in enumerate(pdf.pages):
-                text = page.extract_text()
-                if text and text.strip():
-                    paragraphs = [p for p in text.split('\n') if p.strip()]
-                    for j, para in enumerate(paragraphs):
-                        if para.strip():
-                            chunks.append({
-                                "text": para.strip(),
-                                "sheet": f"page_{i+1}",
-                                "row": j,
-                                "source_file": os.path.basename(file_path)
-                            })
+        
+
+        doc = fitz.open(file_path)
+        for i, page in enumerate(doc):
+            pix = page.get_pixmap()
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            ocr_text = pytesseract.image_to_string(img)
+            if ocr_text and ocr_text.strip():
+                paragraphs = [p for p in ocr_text.split('\n') if p.strip()]
+                for j, para in enumerate(paragraphs):
+                    if para.strip():
+                        chunks.append({
+                            "text": para.strip(),
+                            "sheet": f"page_{i+1}",
+                            "row": j,
+                            "source_file": os.path.basename(file_path)
+                        })
     elif ext == ".docx":
         doc = docx.Document(file_path)
         for i, para in enumerate(doc.paragraphs):
