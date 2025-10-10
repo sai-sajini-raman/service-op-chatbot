@@ -16,7 +16,7 @@ CHROMA_COLLECTION_NAME = "excel_chunks_ingest_v2"
 # Weaviate settings
 WEAVIATE_URL = "http://localhost:8080"  # needs to be updated hosted elsewhere
 
-WEAVIATE_EXCEL_CLASS_NAME = "ExcelChunks_oct3"
+WEAVIATE_EXCEL_CLASS_NAME = "ExcelChunks_withMeta_oct10"
 WEAVIATE_DOCUMENT_CLASS_NAME = "DocumentChunks_oct2"
 MEMORY_CLASS = "Context_v2"
 
@@ -55,7 +55,7 @@ RESPONSE RULES
 - Always ask user before doing anything outside the user's ask.
 
 
-2) If the user asks for more details about particular incident/incidents, Display every detail you have about that incident with relevent sub-headings for better understanding.
+2) If the user asks for more details about particular incident/incidents, Display details like When it happened?, Issue Description, Business impact, Teams involved, Possible RCA(s), Resolution steps taken, etc, with relevent sub-headings for better understanding.
 
 - If no relevant incidents are found, politely say that no relevant incidents were found.
 
@@ -66,7 +66,9 @@ RESPONSE RULES
           - BST (UTC+1): last Sunday of March → last Sunday of October.
           - GMT (UTC+0): last Sunday of October → last Sunday of March.
 
-4) if user asks anything beyond this area, politely inform them that you are specialized in incident triaging and may not be able to assist with other queries.
+4) If the user provides extra context, explanations, or clarifications, acknowledge it concisely and politely, then offer to assist further or take the next appropriate action. Avoid sending generic closing messages.
+
+5) if user asks anything beyond this area, politely inform them that you are specialized in incident triaging and may not be able to assist with other queries.
 
 TONE & PERSONA
 - Be authoritative yet supportive.

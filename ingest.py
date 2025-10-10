@@ -19,6 +19,7 @@ def parse_to_chunks(file_path):
             for sheet_name in xls.sheet_names:
                 df = pd.read_excel(xls, sheet_name=sheet_name)
                 headers = df.columns.tolist()
+                df.columns = df.columns.str.strip()
                 for idx, row in df.iterrows():
                     row_data = {header: row[header] for header in headers}
                     chunk_text = ", ".join([f"{k}: {v}" for k, v in row_data.items() if pd.notnull(v)])
@@ -36,10 +37,12 @@ def parse_to_chunks(file_path):
                             "sheet": sheet_name,
                             "row": idx,
                             "source_file": os.path.basename(file_path),
-                            "portfolio": df.loc[idx].get("Product Portfolio -Area of cause", None),
-                            # "incident_date": incident_date,  # <-- now ISO format
-                            "incident_date": df.iloc[idx].get("Reported Date", None),
-                            "application": df.loc[idx].get("Application/Service Impacted?", None)
+                            "incident_date": row.get("Reported Date", None),
+                            "incident_number": row.get("Incident", None),
+                            "incident_category": row.get("Inc Category", None),
+                            "problem_record": row.get("Problem Record", None),
+                            "portfolio": row.get("Product Portfolio -Area of cause", None),
+                            "application": row.get("Application/Service Impacted?", None)
                         })
     elif ext == ".pdf":
         with pdfplumber.open(file_path) as pdf:
@@ -106,14 +109,17 @@ def create_class_if_not_exists(client, class_name):
         class_obj = {
             "class": class_name,
             "properties": [
-                {"name": "text", "dataType": ["text"]},
-                {"name": "sheet", "dataType": ["text"]},
-                {"name": "row", "dataType": ["int"]},
-                {"name": "source_file", "dataType": ["text"]},
-                {"name": "portfolio", "dataType": ["text"]},
-                # {"name": "incident_date", "dataType": ["date"]},
-                {"name": "incident_date", "dataType": ["text"]},
-                {"name": "application", "dataType": ["text"]},
+                {"name": "text", "dataType": ["text"], "indexFilterable": True},
+                {"name": "sheet", "dataType": ["text"], "indexFilterable": True},
+                {"name": "row", "dataType": ["int"], "indexFilterable": True},
+                {"name": "source_file", "dataType": ["text"], "indexFilterable": True},
+                {"name": "incident_date", "dataType": ["text"], "indexFilterable": True},
+                {"name": "incident_number", "dataType": ["text"], "indexFilterable": True},
+                {"name": "incident_category", "dataType": ["text"], "indexFilterable": True},
+                {"name": "problem_record", "dataType": ["text"], "indexFilterable": True},
+                {"name": "portfolio", "dataType": ["text"], "indexFilterable": True},
+                {"name": "application", "dataType": ["text"], "indexFilterable": True}
+                # "indexSearchable": True
             ]
         }
         client.schema.create_class(class_obj)
@@ -125,6 +131,8 @@ def ingest_to_weaviate_by_type(excel_chunks, other_chunks):
         if isinstance(val, float):
             if math.isnan(val) or math.isinf(val):
                 return None
+        if isinstance(val, str):
+            return val.strip().lower()
         return val
     """Ingest chunks into separate Weaviate classes by file type."""
     from config import WEAVIATE_EXCEL_CLASS_NAME, WEAVIATE_DOCUMENT_CLASS_NAME
@@ -145,12 +153,15 @@ def ingest_to_weaviate_by_type(excel_chunks, other_chunks):
             embedding = model.encode([chunk["text"]])[0].tolist()
             client.data_object.create(
                 data_object={
-                    "text": sanitize_value(chunk["text"]),
+                    "text": chunk["text"],
                     "sheet": sanitize_value(chunk["sheet"]),
                     "row": int(chunk["row"]),
                     "source_file": sanitize_value(chunk.get("source_file")),
-                    "portfolio": sanitize_value(chunk.get("portfolio")),
                     "incident_date": str(sanitize_value(chunk.get("incident_date"))) if chunk.get("incident_date") is not None else None,
+                    "incident_number": str(sanitize_value(chunk.get("incident_number"))) if chunk.get("incident_number") is not None else None,
+                    "incident_category": sanitize_value(chunk.get("incident_category")),
+                    "problem_record": str(sanitize_value(chunk.get("problem_record"))) if chunk.get("problem_record") is not None else None,
+                    "portfolio": sanitize_value(chunk.get("portfolio")),
                     "application": sanitize_value(chunk.get("application"))
                 },
                 class_name=excel_class,

@@ -87,21 +87,42 @@ def trim_context_history_if_needed(conversation_id):
         print(f"Error trimming context history: {str(e)}")
 
 
-def retrieve_chunks(query, top_k=TOP_K):
+def retrieve_chunks(query, top_k=TOP_K, filter_dict=None):
     client = weaviate.Client("http://localhost:8080")
     model = SentenceTransformer(EMBEDDING_MODEL)
     query_emb = model.encode([query])[0].tolist()
+
+    where_clause = None
+    if filter_dict:
+        operands = []
+        for field, values in filter_dict.items():
+            if values:
+                operands.append({
+                    "path": [field],
+                    "operator": "ContainsAny",
+                    "valueString": values if isinstance(values, list) else [values]
+                })
+        if operands:
+            where_clause = {
+                "operator": "And",
+                "operands": operands
+            }
+    excel_query = client.query.get(WEAVIATE_EXCEL_CLASS_NAME, ["text", "sheet", "row"])
+    if where_clause:
+        excel_query = excel_query.with_where(where_clause)
     excel_results = (
-        client.query
-        .get(WEAVIATE_EXCEL_CLASS_NAME, ["text", "sheet", "row"])
+        excel_query
         .with_near_vector({"vector": query_emb})
         .with_limit(top_k)
         .with_additional(["distance"])
         .do()
     )
+
+    doc_query = client.query.get(WEAVIATE_DOCUMENT_CLASS_NAME, ["text", "sheet", "row"])
+    # if where_clause:
+    #     doc_query = doc_query.with_where(where_clause)
     doc_results = (
-        client.query
-        .get(WEAVIATE_DOCUMENT_CLASS_NAME, ["text", "sheet", "row"])
+        doc_query
         .with_near_vector({"vector": query_emb})
         .with_limit(top_k)
         .with_additional(["distance"])
@@ -121,6 +142,7 @@ def retrieve_chunks(query, top_k=TOP_K):
     return chunks
 
 def build_prompt(context_chunks, user_query, conversation_history):
+
     history_txt = ""
     from datetime import date
     today = date.today()
@@ -147,6 +169,41 @@ def build_prompt(context_chunks, user_query, conversation_history):
     )
     return prompt
 
+def build_filter_prompt(user_query, metadata_dict):
+    metadata_info = "\n".join([f"- {field}: {', '.join(map(str, vals))}" for field, vals in metadata_dict.items() if vals])
+    prompt = (
+        f"You are an expert at analyzing user queries to extract relevant metadata filters.\n"
+        f"Given the user query and the available metadata fields with their possible values, identify which metadata fields and values are relevant to the query.\n\n"
+        f"User Query: {user_query}\n\n"
+        f"Allowed Metadata Fields and Values:\n{metadata_info}\n\n"
+        f"PROVIDE ONLY PORTFOLIO FILTERS. Do not provide any other metadata fields. Provide incident_number filter only if user asks for a specific incident number\n"
+        f"Output a JSON object with field names as keys and lists of relevant values. If no relevant metadata, return an empty JSON object."
+        f"Example:\n"
+        f"1) User Query: Show allocation issues in Foods portfolio\n"
+        f'Output: {{"portfolio":["food commercial trading","foods commercial trading","food supply chain","foods supply chain","foods"]}}\n\n'
+        f"2) User Query: I want to know about C&H issues\n"
+        f'Output: {{"portfolio":["c&h & intl supply chain","c&h commercial trading"]}}\n\n'
+
+    )
+    return prompt
+
+def get_metadata_uniques(class_name, metadata_fields):
+    import weaviate
+    client = weaviate.Client("http://localhost:8080")
+    # Query all objects, requesting only metadata fields
+    result = client.query.get(class_name, metadata_fields).with_limit(1000).do()
+    objects = result.get("data", {}).get("Get", {}).get(class_name, [])
+    
+    metadata_dict = {field: set() for field in metadata_fields}
+    for obj in objects:
+        for field in metadata_fields:
+            val = obj.get(field)
+            if val is not None:
+                metadata_dict[field].add(val)
+    # Convert sets to lists
+    metadata_dict = {field: list(vals) for field, vals in metadata_dict.items()}
+    return metadata_dict
+
 def call_llm(prompt):
     import os
     from dotenv import load_dotenv
@@ -159,7 +216,7 @@ def call_llm(prompt):
         raise ValueError("GEMINI_API_KEY environment variable is required")
 
     client = genai.Client(api_key=api_key)
-    model_name = "gemini-2.5-pro"  # You can make this configurable if needed
+    model_name = "gemini-2.5-flash-lite"  # You can make this configurable if needed
 
     # Gemini expects contents as a list of strings (the prompt)
     try:
@@ -186,6 +243,7 @@ def answer_query(user_query, conversation_id, user_id):
 
     # Regex for all "incident" + 8 digits
     matches = re.findall(r'incident[\s:-]*(\d{8})', user_query, re.IGNORECASE)
+    matches = False
     if matches:
         incident_numbers = set(matches)
         import glob
@@ -224,9 +282,24 @@ def answer_query(user_query, conversation_id, user_id):
                 "chunks": context_chunks,
                 "latency": latency
             }
-
+   
+    # Analyze user query
+    metadata_fields = [
+        "incident_date", "incident_number", "incident_category", 
+        "problem_record", "portfolio", "application", 
+        "sheet", "source_file", "row"
+    ]
+    metadata_dict = get_metadata_uniques(WEAVIATE_EXCEL_CLASS_NAME, metadata_fields)
+    prompt_f = build_filter_prompt(user_query, metadata_dict)
+    json_filter = call_llm(prompt_f)
+    import json
+    try:
+        analysed_json = json.loads(json_filter)
+    except Exception as e:
+        analysed_json = None
+        print(f"Failed to parse LLM output as JSON: {e}")
     # Fallback to embedding search
-    retrieved_chunks = retrieve_chunks(user_query)
+    retrieved_chunks = retrieve_chunks(user_query, filter_dict=analysed_json)
     filtered_chunks = [c for c in retrieved_chunks if c.get('distance') is not None and c.get('distance') < 0.8]
     sorted_chunks = sorted(
         filtered_chunks,
