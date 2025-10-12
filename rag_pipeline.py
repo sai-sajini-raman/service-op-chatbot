@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import os
 import time
 from llama_index.llms.gemini import Gemini
@@ -67,6 +68,39 @@ def hybrid_search(client, class_name, query, rewritten_query, top_k=5):
                 return []
         except:
             return []
+=======
+# rag_pipeline.py
+import os
+import time
+from sentence_transformers import SentenceTransformer
+import weaviate
+from config import WEAVIATE_URL, WEAVIATE_CLASS_NAME, EMBEDDING_MODEL, TOP_K, SYSTEM_PROMPT, DEFAULT_MODEL, FALLBACK_MODEL
+
+def retrieve_chunks(query, top_k=TOP_K):
+    # Connect to Weaviate HTTP-only (v4)
+    client = weaviate.Client("http://localhost:8080")
+    model = SentenceTransformer(EMBEDDING_MODEL)
+    query_emb = model.encode([query])[0].tolist()
+    # Use legacy HTTP query API to avoid gRPC errors
+    results = (
+        client.query
+        .get(WEAVIATE_CLASS_NAME, ["text", "sheet", "row"])
+        .with_near_vector({"vector": query_emb})
+        .with_limit(top_k)
+        .with_additional(["distance"])
+        .do()
+    )
+    hits = results.get("data", {}).get("Get", {}).get(WEAVIATE_CLASS_NAME, [])
+    chunks = []
+    for hit in hits:
+        chunks.append({
+            "text": hit.get("text"),
+            "sheet": hit.get("sheet"),
+            "row": hit.get("row"),
+            "distance": hit.get("_additional", {}).get("distance")
+        })
+    return chunks
+>>>>>>> 376396da3a0af583750614f36a751c757cc6dddc
 
 def get_llm():
     try:
@@ -97,6 +131,7 @@ def get_llm():
         print(f"Error initializing Gemini LLM: {e}")
         raise e
 
+<<<<<<< HEAD
 def rewrite_query_with_context(llm, user_query, conversation_history):
     """Rewrite user query considering conversation context for better retrieval"""
     if conversation_history:
@@ -381,3 +416,46 @@ def main():
 
 if __name__ == "__main__":
     main()
+=======
+def call_llm(prompt, model=DEFAULT_MODEL):
+    from azure.ai.inference import ChatCompletionsClient
+    from azure.ai.inference.models import SystemMessage, UserMessage
+    from azure.core.credentials import AzureKeyCredential
+
+    endpoint = "https://models.github.ai/inference"
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        raise ValueError("Missing GITHUB_TOKEN environment variable.")
+
+    model_name = "openai/gpt-4o" if model == DEFAULT_MODEL else "openai/gpt-4.1"
+
+    client = ChatCompletionsClient(endpoint=endpoint, credential=AzureKeyCredential(token))
+    response = client.complete(
+        messages=[SystemMessage(SYSTEM_PROMPT), UserMessage(prompt)],
+        temperature=1.0,
+        top_p=1.0,
+        max_tokens=1000,
+        model=model_name
+    )
+    return response.choices[0].message.content
+
+def answer_query(user_query):
+    start = time.time()
+    retrieved_chunks = retrieve_chunks(user_query)
+    # Sort chunks by similarity score (distance ascending)
+    sorted_chunks = sorted(
+        retrieved_chunks,
+        key=lambda c: c.get('distance') if c.get('distance') is not None else float('inf')
+    )
+    prompt = build_prompt(sorted_chunks, user_query)
+    answer = call_llm(prompt)
+    latency = time.time() - start
+    sources = [(c['sheet'], c['row']) for c in sorted_chunks]
+
+    return {
+        "answer": answer,
+        "sources": sources,
+        "chunks": sorted_chunks,
+        "latency": latency
+    }
+>>>>>>> 376396da3a0af583750614f36a751c757cc6dddc

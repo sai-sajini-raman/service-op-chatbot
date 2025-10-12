@@ -5,6 +5,7 @@ llama-index-readers-file
 llama-index-embeddings-huggingface
 openpyxl
 pandas
+<<<<<<< HEAD
 python-docx
 weaviate-client==3.26.7
 tqdm
@@ -13,3 +14,12 @@ sentence-transformers
 streamlit
 google-generativeai
 uuid
+=======
+sentence-transformers
+azure-ai-inference
+openpyxl
+chromadb
+weaviate-client
+pdfplumber
+docx
+>>>>>>> 376396da3a0af583750614f36a751c757cc6dddc
