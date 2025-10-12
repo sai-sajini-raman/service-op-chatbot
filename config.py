@@ -76,6 +76,42 @@ GEMINI_MODEL = "models/gemini-2.0-flash-exp"
 # Weaviate class name prefix for chunk storage
 CHUNK_CLASS_PREFIX = "Oct11_class"
 
+# Prompt templates
+QUERY_REWRITE_PROMPT_WITH_HISTORY = """
+Given the conversation history below, rewrite the user's current query to be more specific and better suited for document retrieval. Include relevant context from previous questions if needed.
+
+Conversation history:
+{recent_context}
+
+Current user query: {user_query}
+
+Rewritten query (make it more specific and searchable):
+"""
+
+QUERY_REWRITE_PROMPT_NO_HISTORY = """
+Rewrite this user query to be more specific and better suited for document retrieval in an IT incident knowledge base: {user_query}
+
+Rewritten query:
+"""
+
+LLM_ANSWER_PROMPT = """
+You are an IT incident support assistant. Answer the user's question using the retrieved documents and conversation context.
+
+Previous conversation context:
+{recent_context}
+
+Current user question: {query}
+
+Retrieved relevant documents:
+{combined_text}
+
+Please provide a clear, helpful response that:
+1. Directly answers the user's question
+2. References specific incident numbers if relevant
+3. Considers the conversation context
+4. Provides actionable information when possible
+"""
+
 def get_current_class_name():
     """Get the current class name for querying"""
     import weaviate
