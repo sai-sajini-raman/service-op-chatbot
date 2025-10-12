@@ -1,0 +1,15 @@
+llama-index
+llama-index-llms-gemini
+llama-index-vector-stores-weaviate
+llama-index-readers-file
+llama-index-embeddings-huggingface
+openpyxl
+pandas
+python-docx
+weaviate-client==3.26.7
+tqdm
+python-dotenv
+sentence-transformers
+streamlit
+google-generativeai
+uuid
