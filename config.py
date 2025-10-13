@@ -117,6 +117,12 @@ Rewritten query (make it more specific and searchable):
 QUERY_REWRITE_PROMPT_NO_HISTORY = """
 Rewrite this user query to be more specific and better suited for document retrieval in an IT incident knowledge base: {user_query}
 
+Guidelines:
+- If the query contains an 8-digit number, treat it as an incident number
+- If asking for "details about [number]", rewrite as "incident [number] details"
+- Keep incident numbers prominent in the rewritten query
+- Add relevant keywords like "incident", "problem", "issue" when appropriate
+
 Rewritten query:
 """
 
@@ -172,15 +178,22 @@ Don't introduce yourself everytime
 ---
 
 2) **When the user asks for more details about specific incident(s):**
+
+**Important:** If the user mentions a specific incident number (like 90610998), search thoroughly in the retrieved documents for that exact number. Look in:
+- PDF document names/filenames
+- Document content and text
+- Excel spreadsheet data
+- Any metadata or incident references
+
 Provide a well-structured response with subheadings such as:
 - **When it happened**
-- **Issue Description**
+- **Issue Description**  
 - **Business Impact**
 - **Teams Involved**
 - **Possible RCA(s)**
 - **Resolution Steps Taken**
 
-If no relevant incidents are found, respond politely indicating that.
+If no relevant incidents are found, respond politely indicating that, but double-check the documents first.
 
 ---
 
