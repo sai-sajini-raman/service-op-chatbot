@@ -19,7 +19,7 @@ WEAVIATE_PORT = int(os.getenv("WEAVIATE_PORT", 8080))
 CHAT_WINDOW_SIZE = int(os.getenv("CHAT_WINDOW_SIZE", 3))
 
 # Hybrid search config
-HYBRID_SEARCH_K = int(os.getenv("HYBRID_SEARCH_K", 5))  # top-k results
+HYBRID_SEARCH_K = int(os.getenv("HYBRID_SEARCH_K", 8))  # top-k results
 
 # Metadata extraction for Excel
 EXCEL_METADATA_FIELDS = {
@@ -76,6 +76,32 @@ GEMINI_MODEL = "models/gemini-2.0-flash-exp"
 # Weaviate class name prefix for chunk storage
 CHUNK_CLASS_PREFIX = "Oct11_class"
 
+# Domain-specific query enhancement patterns
+PEAK_PERIOD_PATTERNS = [
+    r'\bpeak\s+(time|period|season)\b',
+    r'\bpeak\s+times?\b',
+    r'\bpeak\s+periods?\b',
+    r'\bbusiest\s+(time|period|season)\b',
+    r'\bhigh\s+volume\s+(time|period)\b'
+]
+
+CLOCK_CHANGE_PATTERNS = [
+    r'\bclock\s+change\b',
+    r'\btime\s+change\b',
+    r'\bdaylight\s+saving\b',
+    r'\bsummer\s+time\b',
+    r'\bwinter\s+time\b',
+    r'\bbst\s+to\s+gmt\b',
+    r'\bgmt\s+to\s+bst\b',
+    r'\bclocks?\s+(forward|back)\b'
+]
+
+# Peak period definition
+PEAK_PERIOD_MONTHS = "October-December"
+
+# UK Clock change information
+UK_CLOCK_CHANGE_INFO = "BST (UTC+1) from last Sunday March to last Sunday October, GMT (UTC+0) from last Sunday October to last Sunday March"
+
 # Prompt templates
 QUERY_REWRITE_PROMPT_WITH_HISTORY = """
 Given the conversation history below, rewrite the user's current query to be more specific and better suited for document retrieval. Include relevant context from previous questions if needed.
@@ -124,8 +150,12 @@ Always use the above information to answer the user query — never invent or as
 ---
 
 ### RESPONSE RULES
+Don't introduce yourself everytime
 
 1) **When the user describes an issue:**
+
+- If no relevant incidents are found, **state it politely**.
+
 - If relevant incidents are found, display them in a **Markdown table** with the following columns, listing **top 5 most relevant incidents** (based on shortest distance = closest match) and **most recent first**:
 
 | **Incident Number** | **Reported Date** | **Issue Description** |
@@ -134,7 +164,7 @@ Always use the above information to answer the user query — never invent or as
 
 - If the type of issue is unclear, **ask clarifying questions**.
 - If multiple interpretations are possible, **ask clarifying questions**.
-- If no relevant incidents are found, **state it politely**.
+
 - If there are gaps in information (from Current User Question and Previous Conversation Context), **ask for clarification**.
 - **List triaging steps only if the user explicitly asks.**
 - **Never perform extra actions** beyond what the user has asked without confirmation.
@@ -155,6 +185,9 @@ If no relevant incidents are found, respond politely indicating that.
 ---
 
 3) **When the user asks for incidents in a specific time period:**
+
+- If no relevant incidents in the mentioned time period are found in the given Retrieved Relevant Documents, **state it politely**.
+
 Filter incidents based on the time period provided.
 
 **Special references:**

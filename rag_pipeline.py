@@ -17,6 +17,10 @@ from config import (
     QUERY_REWRITE_PROMPT_WITH_HISTORY,
     QUERY_REWRITE_PROMPT_NO_HISTORY,
     LLM_ANSWER_PROMPT,
+    PEAK_PERIOD_PATTERNS,
+    CLOCK_CHANGE_PATTERNS,
+    PEAK_PERIOD_MONTHS,
+    UK_CLOCK_CHANGE_INFO,
 )
 
 # Global variables for initialized components
@@ -100,16 +104,89 @@ def get_llm():
         print(f"Error initializing Gemini LLM: {e}")
         raise e
 
+def preprocess_query_for_domain_terms(user_query):
+    """Preprocess query to handle domain-specific terms like peak period and clock change"""
+    import re
+    from datetime import datetime
+    
+    query_lower = user_query.lower()
+    enhanced_query = user_query
+    
+    # Handle peak period/peak time mentions using config patterns
+    for pattern in PEAK_PERIOD_PATTERNS:
+        if re.search(pattern, query_lower):
+            # Extract key business terms before adding context
+            business_terms = []
+            
+            # Common incident types and business keywords
+            incident_keywords = [
+                'payment', 'decline', 'transaction', 'processing', 'failure',
+                'outage', 'slowness', 'performance', 'error', 'timeout',
+                'authentication', 'login', 'database', 'connection',
+                'network', 'service', 'application', 'system', 'server',
+                'api', 'response', 'latency', 'crash', 'down', 'unavailable',
+                'retry', 'fraud', 'security', 'breach', 'access', 'denied',
+                'certificate', 'ssl', 'tls', 'encryption', 'validation',
+                'integration', 'sync', 'batch', 'job', 'queue', 'message',
+                'notification', 'email', 'sms', 'alert', 'monitoring',
+                'threshold', 'capacity', 'memory', 'cpu', 'disk', 'storage'
+            ]
+            
+            for keyword in incident_keywords:
+                if keyword in query_lower:
+                    business_terms.append(keyword)
+            
+            # Add peak period context while preserving business terms
+            current_year = datetime.now().year
+            if business_terms:
+                business_focus = ' '.join(set(business_terms))  # Remove duplicates
+                peak_info = f" (Peak period: {PEAK_PERIOD_MONTHS} in {current_year-1}, {current_year} - focus on {business_focus} incidents)"
+            else:
+                peak_info = f" (Peak period: {PEAK_PERIOD_MONTHS} in {current_year-1}, {current_year}, and other years)"
+            
+            enhanced_query = enhanced_query + peak_info
+            break
+    
+    # Handle clock change mentions using config patterns
+    for pattern in CLOCK_CHANGE_PATTERNS:
+        if re.search(pattern, query_lower):
+            # Extract relevant business terms for clock change context too
+            time_related_terms = []
+            
+            time_keywords = [
+                'schedule', 'batch', 'job', 'cron', 'timer', 'sync',
+                'timestamp', 'log', 'audit', 'backup', 'maintenance',
+                'processing', 'transaction', 'settlement', 'reconciliation'
+            ]
+            
+            for keyword in time_keywords:
+                if keyword in query_lower:
+                    time_related_terms.append(keyword)
+            
+            if time_related_terms:
+                time_focus = ' '.join(set(time_related_terms))
+                clock_info = f" (UK Clock Changes: {UK_CLOCK_CHANGE_INFO} - focus on {time_focus} issues)"
+            else:
+                clock_info = f" (UK Clock Changes: {UK_CLOCK_CHANGE_INFO})"
+            
+            enhanced_query = enhanced_query + clock_info
+            break
+    
+    return enhanced_query
+
 def rewrite_query_with_context(llm, user_query, conversation_history):
     """Rewrite user query considering conversation context for better retrieval"""
+    # First, preprocess query for domain-specific terms
+    enhanced_query = preprocess_query_for_domain_terms(user_query)
+    
     if conversation_history:
         recent_context = "\n".join(conversation_history[-4:])  # Last 2 exchanges
         prompt = QUERY_REWRITE_PROMPT_WITH_HISTORY.format(
             recent_context=recent_context,
-            user_query=user_query
+            user_query=enhanced_query
         )
     else:
-        prompt = QUERY_REWRITE_PROMPT_NO_HISTORY.format(user_query=user_query)
+        prompt = QUERY_REWRITE_PROMPT_NO_HISTORY.format(user_query=enhanced_query)
     
     try:
         import google.generativeai as genai
@@ -118,7 +195,7 @@ def rewrite_query_with_context(llm, user_query, conversation_history):
         response = model.generate_content(prompt)
         return response.text.strip()
     except:
-        return user_query  # Fallback to original query
+        return enhanced_query  # Fallback to enhanced query
 
 def initialize_rag_components():
     """Initialize all RAG components once - called at module import"""
