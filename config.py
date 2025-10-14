@@ -71,7 +71,7 @@ EXCEL_METADATA_FIELDS = {
 CHUNK_SIZE = 1024  # adjust as needed
 
 # Gemini model name (use default if not specified)
-GEMINI_MODEL = "models/gemini-2.0-flash-exp"
+GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 
 # Weaviate class name prefix for chunk storage
 CHUNK_CLASS_PREFIX = "Oct11_class"
