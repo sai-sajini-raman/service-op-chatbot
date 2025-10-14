@@ -369,8 +369,8 @@ if not st.session_state["welcome"] and not st.session_state["show_questions"]:
         else:
             st.markdown(f'<div class="chat-bubble-assistant">{msg["content"]}</div>', unsafe_allow_html=True)
             # Show latency if available
-            if "latency" in st.session_state and st.session_state["latency"] is not None:
-                st.markdown(f"⏱️ <b>Response time:</b> {st.session_state['latency']:.2f} seconds", unsafe_allow_html=True)
+            if "latency" in msg and msg["latency"] is not None:
+                st.markdown(f"⏱️ <b>Response time:</b> {msg['latency']:.2f} seconds", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     # --- Auto scroll to bottom ---
@@ -465,8 +465,8 @@ if st.session_state["pending_query"]:
             if "sources_history" not in st.session_state:
                 st.session_state["sources_history"] = []
             st.session_state["sources_history"].append(result.get("chunks", []))
-            st.session_state["latency"] = result.get("latency")
-            st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"]})
+            latency_value = result.get("latency")
+            st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"],"latency":latency_value})
             st.session_state["pending_query"] = ""  # clear
             st.rerun()
         except Exception as e:

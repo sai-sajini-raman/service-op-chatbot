@@ -6,8 +6,6 @@ from llama_index.vector_stores.weaviate import WeaviateVectorStore
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.memory import ChatMemoryBuffer
 import weaviate
-import csv
-from datetime import datetime
 from config import (
     GEMINI_API_KEY,
     GEMINI_MODEL,
@@ -193,7 +191,7 @@ def rewrite_query_with_context(llm, user_query, conversation_history):
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
         return response.text.strip()
     except:
@@ -283,26 +281,6 @@ def initialize_rag_components():
         return False
 
 def answer_query(query, conversation_id, user_id):
-    # Logging function
-    def log_llm_usage(api_key, model_name, input_tokens, output_tokens, response_time):
-        LOG_FILE = "llm_usage_log.csv"
-        log_exists = os.path.isfile(LOG_FILE)
-        with open(LOG_FILE, mode='a', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            if not log_exists:
-                writer.writerow([
-                    "date", "time", "api_key", "model_name", "input_tokens", "output_tokens", "response_time"
-                ])
-            now = datetime.now()
-            writer.writerow([
-                now.strftime("%Y-%m-%d"),
-                now.strftime("%H:%M:%S"),
-                api_key,
-                model_name,
-                input_tokens,
-                output_tokens,
-                response_time
-            ])
     """
     Main function to process a query and return the response
     
@@ -366,7 +344,7 @@ def answer_query(query, conversation_id, user_id):
                 try:
                     import google.generativeai as genai
                     genai.configure(api_key=GEMINI_API_KEY)
-                    model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                    model = genai.GenerativeModel(GEMINI_MODEL)
                     
                     response = model.generate_content(prompt)
                     bot_response = response.text
@@ -392,16 +370,6 @@ def answer_query(query, conversation_id, user_id):
                     _conversation_histories[conversation_id] = conversation_history
                     
                     latency = time.time() - start_time
-                    # Try to get token usage from response (Gemini API)
-                    input_tokens = getattr(response, 'usage_metadata', {}).get('prompt_token_count', None)
-                    output_tokens = getattr(response, 'usage_metadata', {}).get('candidates_token_count', None)
-                    # Fallback if not available
-                    if input_tokens is None:
-                        input_tokens = 'N/A'
-                    if output_tokens is None:
-                        output_tokens = 'N/A'
-                    # Log usage
-                    log_llm_usage(GEMINI_API_KEY, GEMINI_MODEL, input_tokens, output_tokens, latency)
                     
                     return {
                         "answer": bot_response,

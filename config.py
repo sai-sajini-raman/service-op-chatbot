@@ -74,7 +74,7 @@ CHUNK_SIZE = 1024  # adjust as needed
 GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 
 # Weaviate class name prefix for chunk storage
-CHUNK_CLASS_PREFIX = "Oct11_class"
+CHUNK_CLASS_PREFIX = "Ingested_class_"
 
 # Domain-specific query enhancement patterns
 PEAK_PERIOD_PATTERNS = [
