@@ -6,6 +6,8 @@ from llama_index.vector_stores.weaviate import WeaviateVectorStore
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.memory import ChatMemoryBuffer
 import weaviate
+import csv
+from datetime import datetime
 from config import (
     GEMINI_API_KEY,
     GEMINI_MODEL,
@@ -15,12 +17,12 @@ from config import (
     HYBRID_SEARCH_K,
     get_current_class_name,
     QUERY_REWRITE_PROMPT_WITH_HISTORY,
-    QUERY_REWRITE_PROMPT_NO_HISTORY,
     LLM_ANSWER_PROMPT,
     PEAK_PERIOD_PATTERNS,
     CLOCK_CHANGE_PATTERNS,
     PEAK_PERIOD_MONTHS,
     UK_CLOCK_CHANGE_INFO,
+    LLM_USAGE_LOG_FILE,
 )
 
 # Global variables for initialized components
@@ -119,22 +121,22 @@ def preprocess_query_for_domain_terms(user_query):
             business_terms = []
             
             # Common incident types and business keywords
-            incident_keywords = [
-                'payment', 'decline', 'transaction', 'processing', 'failure',
-                'outage', 'slowness', 'performance', 'error', 'timeout',
-                'authentication', 'login', 'database', 'connection',
-                'network', 'service', 'application', 'system', 'server',
-                'api', 'response', 'latency', 'crash', 'down', 'unavailable',
-                'retry', 'fraud', 'security', 'breach', 'access', 'denied',
-                'certificate', 'ssl', 'tls', 'encryption', 'validation',
-                'integration', 'sync', 'batch', 'job', 'queue', 'message',
-                'notification', 'email', 'sms', 'alert', 'monitoring',
-                'threshold', 'capacity', 'memory', 'cpu', 'disk', 'storage'
-            ]
+            # incident_keywords = [
+            #     'payment', 'decline', 'transaction', 'processing', 'failure',
+            #     'outage', 'slowness', 'performance', 'error', 'timeout',
+            #     'authentication', 'login', 'database', 'connection',
+            #     'network', 'service', 'application', 'system', 'server',
+            #     'api', 'response', 'latency', 'crash', 'down', 'unavailable',
+            #     'retry', 'fraud', 'security', 'breach', 'access', 'denied',
+            #     'certificate', 'ssl', 'tls', 'encryption', 'validation',
+            #     'integration', 'sync', 'batch', 'job', 'queue', 'message',
+            #     'notification', 'email', 'sms', 'alert', 'monitoring',
+            #     'threshold', 'capacity', 'memory', 'cpu', 'disk', 'storage'
+            # ]
             
-            for keyword in incident_keywords:
-                if keyword in query_lower:
-                    business_terms.append(keyword)
+            # for keyword in incident_keywords:
+            #     if keyword in query_lower:
+            #         business_terms.append(keyword)
             
             # Add peak period context while preserving business terms
             current_year = datetime.now().year
@@ -150,13 +152,11 @@ def preprocess_query_for_domain_terms(user_query):
     # Handle clock change mentions using config patterns
     for pattern in CLOCK_CHANGE_PATTERNS:
         if re.search(pattern, query_lower):
-            # Extract relevant business terms for clock change context too
+            # Extractterms for clock change context too
             time_related_terms = []
             
             time_keywords = [
-                'schedule', 'batch', 'job', 'cron', 'timer', 'sync',
-                'timestamp', 'log', 'audit', 'backup', 'maintenance',
-                'processing', 'transaction', 'settlement', 'reconciliation'
+                'clock change'
             ]
             
             for keyword in time_keywords:
@@ -175,6 +175,27 @@ def preprocess_query_for_domain_terms(user_query):
     return enhanced_query
 
 def rewrite_query_with_context(llm, user_query, conversation_history):
+    # Logging function
+    def log_llm_usage(api_key, model_name, input_tokens, output_tokens, response_time=None):
+        log_exists = os.path.isfile(LLM_USAGE_LOG_FILE)
+        with open(LLM_USAGE_LOG_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not log_exists:
+                writer.writerow([
+                    "date", "time", "api_key", "model_name", "input_tokens", "output_tokens", "response_time"
+                ])
+            now = datetime.now()
+            writer.writerow([
+                now.strftime("%Y-%m-%d"),
+                now.strftime("%H:%M:%S"),
+                api_key,
+                model_name,
+                input_tokens,
+                output_tokens,
+                response_time if response_time is not None else "N/A"
+            ])
+    
+
     """Rewrite user query considering conversation context for better retrieval"""
     # First, preprocess query for domain-specific terms
     enhanced_query = preprocess_query_for_domain_terms(user_query)
@@ -186,13 +207,17 @@ def rewrite_query_with_context(llm, user_query, conversation_history):
             user_query=enhanced_query
         )
     else:
-        prompt = QUERY_REWRITE_PROMPT_NO_HISTORY.format(user_query=enhanced_query)
+        pass
     
     try:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
         model = genai.GenerativeModel(GEMINI_MODEL)
         response = model.generate_content(prompt)
+        input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 'N/A') if hasattr(response, 'usage_metadata') else 'N/A'
+        output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 'N/A') if hasattr(response, 'usage_metadata') else 'N/A'
+        log_llm_usage(GEMINI_API_KEY, GEMINI_MODEL, input_tokens, output_tokens)
+        
         return response.text.strip()
     except:
         return enhanced_query  # Fallback to enhanced query
@@ -281,6 +306,25 @@ def initialize_rag_components():
         return False
 
 def answer_query(query, conversation_id, user_id):
+    # Logging function
+    def log_llm_usage(api_key, model_name, input_tokens, output_tokens, response_time=None):
+        log_exists = os.path.isfile(LLM_USAGE_LOG_FILE)
+        with open(LLM_USAGE_LOG_FILE, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            if not log_exists:
+                writer.writerow([
+                    "date", "time", "api_key", "model_name", "input_tokens", "output_tokens", "response_time"
+                ])
+            now = datetime.now()
+            writer.writerow([
+                now.strftime("%Y-%m-%d"),
+                now.strftime("%H:%M:%S"),
+                api_key,
+                model_name,
+                input_tokens,
+                output_tokens,
+                response_time if response_time is not None else "N/A"
+            ])
     """
     Main function to process a query and return the response
     
@@ -325,9 +369,14 @@ def answer_query(query, conversation_id, user_id):
             for chunk in chunks:
                 text = chunk.get('text', '')
                 source = chunk.get('source', 'Unknown source')
-                
+                inc_num1 = chunk.get('incident_reference', 'Unknown')
+                inc_num2 = chunk.get('incident_number', 'Unknown')
                 if text:
-                    combined_text += f"\n--- From {source} ---\n{text}\n"
+                    if inc_num1 != 'Unknown':
+                        combined_text += f"\n--- From {source} ; Incident number: {inc_num1} ---\n{text}\n"
+                    else:
+                        combined_text += f"\n--- From {source} ; Incident number: {inc_num2} ---\n{text}\n"
+
                     if source not in sources:
                         sources.append(source)
             
@@ -347,6 +396,12 @@ def answer_query(query, conversation_id, user_id):
                     model = genai.GenerativeModel(GEMINI_MODEL)
                     
                     response = model.generate_content(prompt)
+
+                    # Try to get token usage from response (Gemini API)
+                    input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 'N/A') if hasattr(response, 'usage_metadata') else 'N/A'
+                    output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 'N/A') if hasattr(response, 'usage_metadata') else 'N/A'               
+                    
+
                     bot_response = response.text
                     
                     # Extract just the filenames from full paths for sources
@@ -371,6 +426,15 @@ def answer_query(query, conversation_id, user_id):
                     
                     latency = time.time() - start_time
                     
+                    
+                    
+                    if input_tokens is None:
+                        input_tokens = 'N/A'
+                    if output_tokens is None:
+                        output_tokens = 'N/A'
+                    # Log usage
+                    log_llm_usage(GEMINI_API_KEY, GEMINI_MODEL, input_tokens, output_tokens, latency)
+                    
                     return {
                         "answer": bot_response,
                         "chunks": chunks,
@@ -381,7 +445,8 @@ def answer_query(query, conversation_id, user_id):
                 except Exception as direct_llm_error:
                     latency = time.time() - start_time
                     return {
-                        "answer": f"Found {len(chunks)} relevant documents but cannot process them due to an error.",
+                        # "answer": "You have exhausted your daily limit. Try later or change API keys.",
+                        "answer" : f"Error is {direct_llm_error}",
                         "chunks": chunks,
                         "latency": latency,
                         "sources": sources

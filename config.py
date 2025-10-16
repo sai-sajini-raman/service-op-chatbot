@@ -76,6 +76,9 @@ GEMINI_MODEL = "models/gemini-2.5-flash-lite"
 # Weaviate class name prefix for chunk storage
 CHUNK_CLASS_PREFIX = "Ingested_class_"
 
+# LLM usage log file name
+LLM_USAGE_LOG_FILE = "llm_usage_log.csv"
+
 # Domain-specific query enhancement patterns
 PEAK_PERIOD_PATTERNS = [
     r'\bpeak\s+(time|period|season)\b',
@@ -87,13 +90,10 @@ PEAK_PERIOD_PATTERNS = [
 
 CLOCK_CHANGE_PATTERNS = [
     r'\bclock\s+change\b',
-    r'\btime\s+change\b',
     r'\bdaylight\s+saving\b',
     r'\bsummer\s+time\b',
     r'\bwinter\s+time\b',
-    r'\bbst\s+to\s+gmt\b',
-    r'\bgmt\s+to\s+bst\b',
-    r'\bclocks?\s+(forward|back)\b'
+    
 ]
 
 # Peak period definition
