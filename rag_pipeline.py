@@ -217,10 +217,30 @@ def rewrite_query_with_context(llm, user_query, conversation_history):
         input_tokens = getattr(response.usage_metadata, 'prompt_token_count', 'N/A') if hasattr(response, 'usage_metadata') else 'N/A'
         output_tokens = getattr(response.usage_metadata, 'candidates_token_count', 'N/A') if hasattr(response, 'usage_metadata') else 'N/A'
         log_llm_usage(GEMINI_API_KEY, GEMINI_MODEL, input_tokens, output_tokens)
-        
         return response.text.strip()
-    except:
-        return enhanced_query  # Fallback to enhanced query
+    except Exception as direct_llm_error:
+        error_message = None
+        # Try to extract error_message from the error object
+        if hasattr(direct_llm_error, 'error') and isinstance(direct_llm_error.error, dict):
+            error_message = direct_llm_error.error.get('message')
+        elif isinstance(direct_llm_error, dict):
+            error_message = direct_llm_error.get('message')
+        else:
+            import json
+            try:
+                err_obj = json.loads(str(direct_llm_error))
+                error_message = err_obj.get('message')
+            except:
+                error_message = str(direct_llm_error)
+        # Use first 3 chars of error_message to identify error code
+        if error_message and error_message[:3] == '403':
+            return "You do not have permission to access this service or model. Please check your API key and access rights."
+        elif error_message and error_message[:3] == '429':
+            return "You have reached the usage limit for this service. Please wait and try again later, or check your plan and billing details."
+        elif error_message and error_message[:3] == '503':
+            return "The service is temporarily unavailable. Please try again in a few moments."
+        else:
+            return "Sorry, something went wrong while processing your request. Please try again in a few moments." if error_message else enhanced_query
 
 def initialize_rag_components():
     """Initialize all RAG components once - called at module import"""
@@ -444,9 +464,30 @@ def answer_query(query, conversation_id, user_id):
                     
                 except Exception as direct_llm_error:
                     latency = time.time() - start_time
+                    error_message = None
+                    # Try to extract error_message from the error object
+                    if hasattr(direct_llm_error, 'error') and isinstance(direct_llm_error.error, dict):
+                        error_message = direct_llm_error.error.get('message')
+                    elif isinstance(direct_llm_error, dict):
+                        error_message = direct_llm_error.get('message')
+                    else:
+                        import json
+                        try:
+                            err_obj = json.loads(str(direct_llm_error))
+                            error_message = err_obj.get('message')
+                        except:
+                            error_message = str(direct_llm_error)
+                    # Use first 3 chars of error_message to identify error code
+                    if error_message and error_message[:3] == '403':
+                        answer_msg = "You do not have permission to access this service or model. Please check your API key and access rights."
+                    elif error_message and error_message[:3] == '429':
+                        answer_msg = "You have reached the usage limit for this service. Please wait and try again later, or check your plan and billing details."
+                    elif error_message and error_message[:3] == '503':
+                        answer_msg = "The service is temporarily unavailable. Please try again in a few moments."
+                    else:
+                        answer_msg = "Sorry, something went wrong while processing your request. Please try again in a few moments."
                     return {
-                        # "answer": "You have exhausted your daily limit. Try later or change API keys.",
-                        "answer" : f"Error is {direct_llm_error}",
+                        "answer": answer_msg,
                         "chunks": chunks,
                         "latency": latency,
                         "sources": sources
@@ -470,6 +511,7 @@ def answer_query(query, conversation_id, user_id):
             
     except Exception as e:
         latency = time.time() - start_time
+        print(e)
         return {
             "answer": "Sorry, I encountered an error processing your question.",
             "chunks": [],

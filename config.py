@@ -71,7 +71,7 @@ EXCEL_METADATA_FIELDS = {
 CHUNK_SIZE = 1024  # adjust as needed
 
 # Gemini model name (use default if not specified)
-GEMINI_MODEL = "models/gemini-2.5-flash-lite"
+GEMINI_MODEL = "models/gemini-2.5-pro"
 
 # Weaviate class name prefix for chunk storage
 CHUNK_CLASS_PREFIX = "Ingested_class_"
@@ -162,7 +162,7 @@ Don't introduce yourself everytime
 
 - If no relevant incidents are found, **state it politely**.
 
-- If relevant incidents are found, display them in a **Markdown table** with the following columns, listing **top 5 most relevant incidents** (based on shortest distance = closest match) and **most recent first**:
+- If relevant incidents are found, display them in a **Markdown table** with the following columns, listing **top 5 most relevant incidents ** and **most recent first** (shortest distance = closest match) :
 
 | **Incident Number** | **Reported Date** | **Issue Description** |
 |---------------------|-------------------|-----------------------|
@@ -182,7 +182,6 @@ Don't introduce yourself everytime
 **Important:** If the user mentions a specific incident number (like 90610998), search thoroughly in the retrieved documents for that exact number. Look in:
 - PDF document names/filenames
 - Document content and text
-- Excel spreadsheet data
 - Any metadata or incident references
 
 Provide a well-structured response with subheadings such as:

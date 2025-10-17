@@ -69,8 +69,6 @@ st.markdown(
     body, .stApp {{
         background-color: var(--background-color);
         font-family: 'Segoe UI', sans-serif;
-        
-
     }}
 
     .new-chat-btn {{
@@ -174,9 +172,13 @@ st.markdown(
         color: #000;
         box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
         text-align: center;
-        min-width: 200px;
+        min-width: 320px;
+        max-width: 320px;
+        width: 260px;
         margin: 6px;
         animation: slideInLeft 0.8s ease-out;
+        white-space: normal;
+        word-break: break-word;
     }}
 
     div.stButton > button:hover {{
@@ -186,6 +188,7 @@ st.markdown(
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
         color: #fff;
     }}
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -341,11 +344,51 @@ if "selected_option" in st.session_state and not st.session_state["show_question
 if not st.session_state["welcome"] and not st.session_state["show_questions"]:
     with st.sidebar:
         st.title("👧🏻 SARA")
-        if st.button("Go to Home", key="home_btn"):
+        st.markdown(
+            """
+      <style>
+    /* Target only sidebar buttons */
+    [data-testid="stSidebar"] button[kind="secondary"] {
+       background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.12),
+            rgba(255, 255, 255, 0.08)
+        ) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 12px !important;
+        padding: 16px 22px !important;
+        font-size: 1.08em !important;
+        color: #000 !important;
+        font-weight: 600 !important;
+        margin-top: 12px !important;
+        margin-bottom: 18px !important;
+        min-width: 100px !important;
+        max-width: 200px !important;
+        width: 100% !important;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25) !important;
+        transition: all 0.25s ease-in-out !important;
+        backdrop-filter: blur(14px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(180%) !important;
+    }
+
+    [data-testid="stSidebar"] button[kind="secondary"]:hover {
+        background: rgba(72, 61, 139, 0.35) !important;
+        color: #fff !important;
+        border-color: rgba(72, 61, 139, 0.35) !important;
+        transform: translateY(-3px) scale(1.05) !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35) !important;
+    }
+    </style>
+            """,
+            unsafe_allow_html=True
+        )
+        st.markdown('<div class="sidebar-home-btn">', unsafe_allow_html=True)
+        if st.button("Go to home", key="home_btn", use_container_width=True):
             st.session_state["chat_history"] = []
             st.session_state["show_questions"] = True
             st.session_state["welcome"] = True
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Chat Container (only after welcome) ---
 if not st.session_state["welcome"] and not st.session_state["show_questions"]:
@@ -371,6 +414,7 @@ if not st.session_state["welcome"] and not st.session_state["show_questions"]:
             # Show latency if available
             if "latency" in msg and msg["latency"] is not None:
                 st.markdown(f"⏱️ <b>Response time:</b> {msg['latency']:.2f} seconds", unsafe_allow_html=True)
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     # --- Auto scroll to bottom ---
@@ -423,7 +467,9 @@ if st.session_state["welcome"]:
     )
 
 # --- Single chat_input for both welcome and post-welcome ---
-user_query = st.chat_input("Type your message...")
+pq = bool(st.session_state.get("pending_query"))
+user_query = st.chat_input("Type your message...", disabled=pq)
+
 
 if user_query:
     st.session_state["welcome"] = False
@@ -440,35 +486,21 @@ if user_query:
 
 if st.session_state["pending_query"]:
     import time
-    user_text = st.session_state["pending_query"].strip().lower()
-    # Add more phrases as needed
-    polite_phrases = ["thank you", "thanks", "ok", "okay", "thx", "ty", "thank u"]
-
-    if any(phrase in user_text for phrase in polite_phrases):
-        st.session_state["chat_history"].append({
-            "role": "assistant",
-            "content": "You're welcome! Please notify me if you need my help further."
-        })
-        st.session_state["pending_query"] = ""
-        # st.session_state["latency"] = None
+    st.markdown(f'<div class="chat-bubble-assistant">{"Retrieving answer..."}</div>', unsafe_allow_html=True)
+    try:
+        result = answer_query(
+                        st.session_state["pending_query"],
+                        st.session_state["conversation_id"],
+                        st.session_state["user_id"],
+                    )
+        # Store chunks for this response for debug display
+        if "sources_history" not in st.session_state:
+            st.session_state["sources_history"] = []
+        st.session_state["sources_history"].append(result.get("chunks", []))
+        latency_value = result.get("latency")
+        st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"],"latency": latency_value})
+        st.session_state["pending_query"] = ""  # clear
         st.rerun()
-    else:
-        import time
-        st.markdown(f'<div class="chat-bubble-assistant">{"Retrieving answer..."}</div>', unsafe_allow_html=True)
-        try:
-            result = answer_query(
-                            st.session_state["pending_query"],
-                            st.session_state["conversation_id"],
-                            st.session_state["user_id"],
-                        )
-            # Store chunks for this response for debug display
-            if "sources_history" not in st.session_state:
-                st.session_state["sources_history"] = []
-            st.session_state["sources_history"].append(result.get("chunks", []))
-            latency_value = result.get("latency")
-            st.session_state["chat_history"].append({"role": "assistant", "content": result["answer"],"latency":latency_value})
-            st.session_state["pending_query"] = ""  # clear
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
